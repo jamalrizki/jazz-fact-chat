@@ -266,7 +266,7 @@ function queryTerms(q) {
 }
 
 /** Pick the passages of a Wikipedia article most relevant to the query. */
-export function relevantExcerpt(text, query, limit = 1400) {
+export function relevantExcerpt(text, query, limit = 900) {
   const terms = queryTerms(query);
   const wantsRecords = /album|record|discograph|played on|sideman|session|lineup|personnel/i.test(query);
   const parts = text.split(/\n(={2,})\s*(.+?)\s*\1\n/);
@@ -296,17 +296,17 @@ export function relevantExcerpt(text, query, limit = 1400) {
     .filter((s) => s.sc > 0)
     .sort((a, b) => b.sc - a.sc)
     .slice(0, 2);
-  let out = condense(intro, 500);
+  let out = condense(intro, 300);
   for (const s of top) out += `\n\n## ${s.title}\n` + condense(s.body, Math.max(200, (limit - out.length) / 2));
   return out.slice(0, limit);
 }
 
-async function wikipediaSearch(query) {
+async function wikipediaSearch(query, pagesWanted = 2) {
   const search = await getJson(
     "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=3&srsearch=" +
       encodeURIComponent(query)
   );
-  const hits = (search?.query?.search || []).slice(0, 2);
+  const hits = (search?.query?.search || []).slice(0, pagesWanted);
   const pages = await Promise.all(
     hits.map(async (h) => {
       const data = await getJson(
@@ -331,7 +331,7 @@ async function webSearch(query, apiKey) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ query, max_results: 4, search_depth: "basic", include_domains: SEARCH_SITES }),
+    body: JSON.stringify({ query, max_results: 3, search_depth: "basic", include_domains: SEARCH_SITES }),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`search HTTP ${res.status}`);
@@ -340,14 +340,16 @@ async function webSearch(query, apiKey) {
     source: new URL(r.url).hostname.replace(/^www\./, ""),
     title: r.title,
     url: r.url,
-    excerpt: String(r.content || "").slice(0, 450),
+    excerpt: String(r.content || "").slice(0, 350),
   }));
 }
 
 async function searchJazz({ query }, env = {}) {
   query = requireString(query, "query", 200);
   const [wiki, web] = await Promise.allSettled([
-    wikipediaSearch(query),
+    // With the web search available, one Wikipedia page is enough; keeps results small
+    // (free-tier models have tight tokens-per-minute limits).
+    wikipediaSearch(query, env.TAVILY_API_KEY ? 1 : 2),
     env.TAVILY_API_KEY ? webSearch(query, env.TAVILY_API_KEY) : Promise.resolve([]),
   ]);
   const results = [

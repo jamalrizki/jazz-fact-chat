@@ -27,6 +27,9 @@ const MAX_MESSAGES = 20;
 const MAX_CHARS_PER_MESSAGE = 4000;
 const UPSTREAM_TIMEOUT_MS = 25000;
 const MAX_TOOL_ROUNDS = 4; // stops a confused model from looping on tools forever
+const MAX_SEARCHES = 2;    // search_jazz calls per question; each one adds ~1k tokens to every later round
+const MAX_REPLY_TOKENS = 1200; // Groq counts this against the 8k tokens-per-minute free limit on every call
+const MAX_RATE_LIMIT_WAIT_S = 15;
 
 // Some models (often ones picked by a free router) write a tool call out as text
 // instead of using the structured tool_calls field. Never show that to the user.
@@ -114,6 +117,7 @@ async function runConversation(messages, env) {
   const mcp = await connect(env); // env carries secrets the tools need (e.g. TAVILY_API_KEY)
   const convo = [...messages];
   const trace = []; // what we report back to the browser so you can see the loop happen
+  let searches = 0;
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // On the final round, tool_choice "none" forces a text answer, and we say so explicitly:
@@ -166,7 +170,15 @@ async function runConversation(messages, env) {
       const started = Date.now();
       try {
         args = JSON.parse(call.function?.arguments || "{}");
-        outcome = await mcp.callTool(name, args); // → MCP tools/call
+        if (name === "search_jazz" && ++searches > MAX_SEARCHES) {
+          // Enforced in code, not just the prompt: models don't always respect "one or two searches".
+          outcome = {
+            text: JSON.stringify({ error: `Search limit reached (${MAX_SEARCHES} per question). Answer now from the results you already have, or say what you couldn't find.` }),
+            isError: true,
+          };
+        } else {
+          outcome = await mcp.callTool(name, args); // → MCP tools/call
+        }
       } catch {
         outcome = { text: JSON.stringify({ error: "Tool arguments were not valid JSON." }), isError: true };
       }
@@ -223,9 +235,9 @@ function providerList(env) {
       url: "https://api.groq.com/openai/v1/chat/completions",
       key: env.GROQ_API_KEY,
       model: env.GROQ_MODEL,
-      // gpt-oss is a reasoning model. "medium" spends a little more thought on
-      // tool choice than "low" did in Phase 1; Groq is fast enough not to notice.
-      extra: { reasoning_effort: "medium" },
+      // gpt-oss is a reasoning model; "low" keeps its hidden reasoning tokens (which count
+      // against the free tier's tokens-per-minute limit) small.
+      extra: { reasoning_effort: "low" },
     });
   }
   if (env.OPENROUTER_API_KEY) {
@@ -252,6 +264,18 @@ async function chatWithFallback(messages, env, tools, toolChoice) {
     try {
       return await callProvider(p, messages, tools, toolChoice);
     } catch (err) {
+      // Rate limited with a short wait (e.g. Groq: "Please try again in 11.2s")? Waiting once
+      // beats falling back to a free-router model that may handle tools badly.
+      const wait = Number(err.message.match(/try again in ([\d.]+)s/i)?.[1]);
+      if (err.message.includes("HTTP 429") && wait > 0 && wait <= MAX_RATE_LIMIT_WAIT_S) {
+        console.warn(`${p.name} rate-limited; waiting ${wait}s and retrying once`);
+        await new Promise((r) => setTimeout(r, Math.ceil(wait * 1000) + 250));
+        try {
+          return await callProvider(p, messages, tools, toolChoice);
+        } catch (err2) {
+          err = err2;
+        }
+      }
       lastError = err;
       console.warn(`${p.name} failed: ${err.message}`);
     }
@@ -273,7 +297,7 @@ async function callProvider(p, messages, tools, toolChoice) {
       tools,                     // the menu the model can order from (from tools/list)
       tool_choice: toolChoice,   // "auto" = model decides; "none" = must answer in text
       temperature: 0.3,
-      max_tokens: 2048,
+      max_tokens: MAX_REPLY_TOKENS,
       ...p.extra,
     }),
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
