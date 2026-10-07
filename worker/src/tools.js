@@ -514,7 +514,6 @@ async function chordChart({ tune, key }) {
   const totalBars = sections.reduce((n, s) => n + s.bars.length, 0);
   const keyLabel = `${keyName} ${chart.mode}`;
   const lines = [`${chart.title} (${chart.composer}) · ${keyLabel} · ${chart.form}`];
-  if (chart.notes?.length) lines.push(`Road map: ${chart.notes.join(", ")}`);
   for (const sec of sections) {
     for (let i = 0; i < sec.bars.length; i += 4) {
       const label = (i === 0 ? sec.label : "").padEnd(2, " ");
