@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Jazz Fact Chat Works</title>
+  <meta name="description" content="The tools behind Jazz Fact Chat, when the model calls them, and how to use its MCP server.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="docs">
+  <header>
+    <nav class="topnav"><a href="index.html">← Back to the chat</a></nav>
+    <h1>How it works</h1>
+    <p class="tagline">Tools, tool calls, and the MCP server behind Jazz Fact Chat.</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>The short version</h2>
+      <p>
+        Jazz Fact Chat is a chat app backed by a free open-weight model (<code>gpt-oss-120b</code> on Groq,
+        with OpenRouter's free models as a fallback). On its own, the model will confidently make up who played
+        on a record. So it is given <strong>tools</strong>: small functions that fetch real data from
+        Wikipedia, MusicBrainz, and a curated fact list. The model decides when to use them, and answers from
+        what they return.
+      </p>
+      <p>
+        The same tools are also published as an <strong>MCP server</strong>, so any MCP client (Claude, an IDE,
+        the MCP Inspector) can use them directly, without this website.
+      </p>
+    </section>
+
+    <section>
+      <h2>What happens when you ask a question</h2>
+      <ol class="flow">
+        <li>
+          <span class="who">Browser → Worker</span>
+          Your question, plus the conversation so far, goes to a Cloudflare Worker. The API keys live there as
+          secrets and never reach your browser.
+        </li>
+        <li>
+          <span class="who">Worker ↔ MCP server</span>
+          The Worker acts as an <em>MCP host</em>. It runs <code>initialize</code>, then <code>tools/list</code>,
+          to learn which tools exist and what arguments they take.
+        </li>
+        <li>
+          <span class="who">Worker → model</span>
+          It sends the model your conversation and the tool definitions (names, descriptions, JSON Schemas).
+          The model never sees the tool code.
+        </li>
+        <li>
+          <span class="who">Model → Worker</span>
+          The model either answers directly, or replies with a <em>tool call</em> such as
+          <code>album_lineup({"album": "Kind of Blue", "artist": "Miles Davis"})</code>. It cannot run anything itself.
+        </li>
+        <li>
+          <span class="who">Worker → tool → model</span>
+          The Worker runs the tool via MCP <code>tools/call</code> and sends the result back to the model.
+          Steps 4–5 repeat (at most 4 rounds) until the model answers in plain text.
+        </li>
+        <li>
+          <span class="who">Worker → browser</span>
+          You get the answer plus a trace of every tool call. Expand <strong>"Used N tools"</strong> under any
+          answer to see the exact arguments and raw results.
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>The tools</h2>
+      <p class="live-status" id="live-status">Loading the tool list from the MCP server…</p>
+      <div id="tool-list"></div>
+    </section>
+
+    <section>
+      <h2>When the model calls which tool</h2>
+      <p>
+        The model picks a tool by reading its description, so the descriptions are written as instructions.
+        In practice:
+      </p>
+      <ul>
+        <li><strong>"Who played drums on <em>Kind of Blue</em>?"</strong> → <code>album_lineup</code>. Any question about personnel or release year. The description says never to answer these from memory.</li>
+        <li><strong>"Who was Mary Lou Williams?"</strong> → <code>lookup_musician</code>. Biography, dates, instruments, career.</li>
+        <li><strong>"Tell me a fun jazz fact."</strong> → <code>random_jazz_fact</code>. Only for trivia requests, never to answer a specific question.</li>
+        <li><strong>"What's a ii–V–I?"</strong> → no tool. General theory is something the model knows well enough.</li>
+      </ul>
+      <p>
+        If a tool finds nothing, the model is instructed to say so instead of filling the gap from memory. Ask about
+        an obscure record and you'll usually get "MusicBrainz doesn't list the personnel" rather than invented names.
+      </p>
+    </section>
+
+    <section>
+      <h2>Use the MCP server directly</h2>
+      <p>Endpoint: <code class="mcp-url">…/mcp</code></p>
+      <ul>
+        <li><strong>Transport:</strong> Streamable HTTP, stateless. Each JSON-RPC message is one POST; responses are plain JSON.</li>
+        <li><strong>Methods:</strong> <code>initialize</code>, <code>ping</code>, <code>tools/list</code>, <code>tools/call</code>.</li>
+        <li><strong>Capabilities:</strong> tools only (no resources or prompts). No authentication. All tools are read-only.</li>
+      </ul>
+      <p>List the tools from a terminal:</p>
+      <pre class="code" id="curl-example">curl -s …/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre>
+      <p>
+        Or connect a client: in the <a href="https://modelcontextprotocol.io/docs/tools/inspector" target="_blank" rel="noopener noreferrer">MCP Inspector</a>,
+        choose <em>Streamable HTTP</em> and paste the endpoint URL. In Claude, add it as a custom connector.
+      </p>
+    </section>
+
+    <section>
+      <h2>Honest limits</h2>
+      <ul>
+        <li>The model is free and open-weight. Tools make it far more accurate, but it can still misread a result or skip a tool call. Check the tool trace.</li>
+        <li>MusicBrainz is community-edited. Plenty of jazz records have no personnel credits there, and the app will tell you so.</li>
+        <li>Free tiers are rate-limited. If Groq is busy, OpenRouter answers instead (the footer shows which one did).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Security notes</h2>
+      <ul>
+        <li>API keys are Cloudflare Worker secrets. They are not in the page or the repository.</li>
+        <li>The chat endpoint only accepts requests from this site's origin. The browser can send only user and assistant messages, so it can't override the system prompt or forge a tool result.</li>
+        <li>Tool arguments come from the model, so they're validated and URL-encoded before any request goes out. Results are size-capped.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="docs-footer">
+    Built with a Cloudflare Worker, GitHub Pages, Groq, Wikipedia, and MusicBrainz. Total running cost: $0.
+    <a href="https://github.com/jamalrizki/jazz-fact-chat" target="_blank" rel="noopener noreferrer">Source on GitHub</a>.
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="docs.js"></script>
+</body>
+</html>

@@ -18,7 +18,7 @@
 import FACTS from "./jazz-facts.json" with { type: "json" };
 
 // Wikipedia and MusicBrainz both ask API clients to identify themselves.
-const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/YOUR-GITHUB-USERNAME/jazz-fact-chat)";
+const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/jamalrizki/jazz-fact-chat)";
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_RESULT_CHARS = 4000; // tool results cost tokens on every later model round
 

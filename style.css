@@ -135,3 +135,92 @@ footer { padding: 0 0 16px; color: var(--muted); font-size: 0.8rem; min-height: 
   border: 1px solid var(--border);
   border-radius: 6px;
 }
+
+/* ---------- Phase 4: nav + docs page ---------- */
+
+.topnav { float: right; padding-top: 6px; font-size: 0.9rem; }
+.topnav a { color: var(--accent); text-decoration: none; }
+.topnav a:hover { text-decoration: underline; }
+
+body.docs { display: block; }
+.docs main { padding: 8px 0 24px; }
+.docs section { margin: 28px 0; }
+.docs h2 { font-size: 1.25rem; margin: 0 0 10px; }
+.docs p, .docs li { max-width: 68ch; }
+.docs a { color: var(--accent); }
+.docs code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1px 4px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.flow { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+.flow li {
+  counter-increment: step;
+  position: relative;
+  padding: 10px 12px 10px 48px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.flow li::before {
+  content: counter(step);
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 24px;
+}
+.flow .who {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.live-status { color: var(--muted); font-style: italic; }
+.live-status.warn { color: var(--error); font-style: normal; }
+
+.tool-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.tool-card h3 { margin: 0 0 6px; font-size: 1rem; }
+.tool-card h3 code { font-size: 0.95rem; }
+.tool-title { color: var(--muted); font-weight: normal; }
+.tool-card p { margin: 0 0 8px; }
+.params { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 4px 0 8px; display: block; overflow-x: auto; }
+.params th, .params td { text-align: left; border-top: 1px solid var(--border); padding: 6px 8px 6px 0; vertical-align: top; }
+.params th { color: var(--muted); font-weight: normal; border-top: 0; }
+.req { color: var(--accent); font-size: 0.75rem; }
+.hints, .muted { color: var(--muted); font-size: 0.8rem; margin: 0; }
+
+pre.code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.docs-footer { border-top: 1px solid var(--border); padding-top: 12px; }

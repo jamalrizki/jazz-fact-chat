@@ -1,9 +1,6 @@
 // Jazz Fact Chat — frontend. No secrets here: this file is public on GitHub Pages.
 
-const IS_LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
-const WORKER_URL = IS_LOCAL
-  ? "http://localhost:8787"
-  : "https://jazz-fact-chat.YOUR-SUBDOMAIN.workers.dev";
+const { WORKER_URL } = window.APP_CONFIG; // set in config.js
 
 const MAX_HISTORY = 20; // matches the Worker's cap
 

@@ -9,5 +9,5 @@ compatibility_date = "2026-05-01"
 GROQ_MODEL = "openai/gpt-oss-120b"
 # OpenRouter's free router: picks a currently-free model that supports what the request needs.
 OPENROUTER_MODEL = "openrouter/free"
-# Comma-separated. Replace YOUR-GITHUB-USERNAME before deploying (origin only — no repo path).
-ALLOWED_ORIGINS = "http://localhost:8000,http://127.0.0.1:8000,https://YOUR-GITHUB-USERNAME.github.io"
+# Comma-separated origins (scheme + host only, no path). GitHub Pages serves this app from jamalrizki.github.io.
+ALLOWED_ORIGINS = "http://localhost:8000,http://127.0.0.1:8000,https://jamalrizki.github.io"
