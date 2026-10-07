@@ -1,0 +1,13 @@
+name = "jazz-fact-chat"
+main = "src/index.js"
+compatibility_date = "2026-05-01"
+
+# Non-secret config. Safe to commit. Secrets (API keys) are NOT here —
+# they go in .dev.vars locally and `wrangler secret put` in production.
+[vars]
+# Groq retired llama-3.3-70b-versatile on 2026-08-16; this is Groq's recommended replacement.
+GROQ_MODEL = "openai/gpt-oss-120b"
+# OpenRouter's free router: picks a currently-free model that supports what the request needs.
+OPENROUTER_MODEL = "openrouter/free"
+# Comma-separated. Replace YOUR-GITHUB-USERNAME before deploying (origin only — no repo path).
+ALLOWED_ORIGINS = "http://localhost:8000,http://127.0.0.1:8000,https://YOUR-GITHUB-USERNAME.github.io"

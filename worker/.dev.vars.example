@@ -1,0 +1,4 @@
+# Copy this file to .dev.vars and fill in real keys. .dev.vars is gitignored.
+# wrangler dev loads .dev.vars automatically; production uses `wrangler secret put`.
+GROQ_API_KEY=gsk_your_key_here
+OPENROUTER_API_KEY=sk-or-your_key_here

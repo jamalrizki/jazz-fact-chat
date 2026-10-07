@@ -1,0 +1,19 @@
+[
+  { "topic": "album", "fact": "Miles Davis's Kind of Blue was recorded in just two sessions, on March 2 and April 22, 1959, at Columbia's 30th Street Studio in New York. It is widely cited as the best-selling jazz album of all time." },
+  { "topic": "album", "fact": "John Coltrane's A Love Supreme (recorded December 1964) is a four-part suite: Acknowledgement, Resolution, Pursuance, and Psalm." },
+  { "topic": "album", "fact": "Bill Evans's trio recorded Sunday at the Village Vanguard on June 25, 1961. Bassist Scott LaFaro died in a car accident just eleven days later." },
+  { "topic": "album", "fact": "\"Take Five,\" from the Dave Brubeck Quartet's 1959 album Time Out, is in 5/4 time and was written by alto saxophonist Paul Desmond, not Brubeck." },
+  { "topic": "musician", "fact": "Dizzy Gillespie's famous upturned trumpet started as an accident in 1953 when the horn was bent. He liked the sound and had trumpets built that way from then on." },
+  { "topic": "musician", "fact": "Charlie Parker's nickname was \"Bird\" (short for \"Yardbird\"), and the New York club Birdland, opened in 1949, was named after him." },
+  { "topic": "musician", "fact": "\"Take the 'A' Train,\" the Duke Ellington Orchestra's signature tune, was written by Billy Strayhorn." },
+  { "topic": "musician", "fact": "Herbie Hancock was 23 when he joined Miles Davis's \"Second Great Quintet\" in 1963, alongside Wayne Shorter, Ron Carter, and Tony Williams." },
+  { "topic": "musician", "fact": "Art Blakey's Jazz Messengers were nicknamed the \"hard bop academy.\" Alumni include Lee Morgan, Wayne Shorter, Freddie Hubbard, and Wynton Marsalis." },
+  { "topic": "musician", "fact": "Ella Fitzgerald won two awards at the very first Grammy ceremony, held in 1959." },
+  { "topic": "history", "fact": "Louis Armstrong's 1926 recording of \"Heebie Jeebies\" is often credited with popularizing scat singing on record." },
+  { "topic": "history", "fact": "Blue Note Records was founded in New York in 1939 by Alfred Lion. Many of its classic sessions were engineered by Rudy Van Gelder, who started out recording in his parents' living room in Hackensack, New Jersey." },
+  { "topic": "theory", "fact": "The ii–V–I is the most common chord progression in jazz. In C major it is Dm7 → G7 → Cmaj7." },
+  { "topic": "theory", "fact": "\"Rhythm changes\" are the chords of George Gershwin's \"I Got Rhythm.\" Bebop players wrote dozens of new melodies over them, including Sonny Rollins's \"Oleo\" and Charlie Parker's \"Anthropology.\"" },
+  { "topic": "theory", "fact": "A tritone substitution swaps a dominant chord for the one a tritone away, e.g. G7 → D♭7. It works because both chords share the same 3rd and 7th (B and F, enharmonically)." },
+  { "topic": "theory", "fact": "\"So What\" from Kind of Blue is a landmark of modal jazz: 16 bars of D Dorian, 8 bars of E♭ Dorian, then 8 bars of D Dorian again." },
+  { "topic": "theory", "fact": "John Coltrane's \"Giant Steps\" (1960) cycles through three key centers a major third apart, a pattern now called \"Coltrane changes.\"" }
+]

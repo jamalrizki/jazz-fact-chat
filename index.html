@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jazz Fact Chat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Jazz Fact Chat</h1>
+    <p class="tagline">Ask about musicians, records, and theory.</p>
+  </header>
+
+  <main id="chat" aria-live="polite">
+    <div class="msg assistant">Hey there. Ask me about a player, an album, or why that ii–V–I sounds so good.</div>
+  </main>
+
+  <form id="composer" autocomplete="off">
+    <textarea id="input" rows="1" placeholder="Who played bass on Kind of Blue?" maxlength="4000" required></textarea>
+    <button id="send" type="submit">Send</button>
+  </form>
+
+  <footer id="status"></footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
