@@ -1,0 +1,144 @@
+[
+  {
+    "title": "Autumn Leaves",
+    "aliases": ["les feuilles mortes"],
+    "composer": "Joseph Kosma",
+    "key": "G", "mode": "minor",
+    "form": "AABC, 32 bars",
+    "sections": [
+      { "label": "A", "bars": ["Cm7", "F7", "Bbmaj7", "Ebmaj7", "Am7b5", "D7", "Gm6", "Gm6"] },
+      { "label": "A", "bars": ["Cm7", "F7", "Bbmaj7", "Ebmaj7", "Am7b5", "D7", "Gm6", "Gm6"] },
+      { "label": "B", "bars": ["Am7b5", "D7", "Gm6", "Gm6", "Cm7", "F7", "Bbmaj7", "Ebmaj7"] },
+      { "label": "C", "bars": ["Am7b5", "D7b9", "Gm7 Gb7", "Fm7 E7", "Ebmaj7", "Am7b5 D7b9", "Gm6", "Gm6"] }
+    ]
+  },
+  {
+    "title": "Blue Bossa",
+    "aliases": [],
+    "composer": "Kenny Dorham",
+    "key": "C", "mode": "minor",
+    "form": "AB, 16 bars",
+    "sections": [
+      { "label": "A", "bars": ["Cm7", "Cm7", "Fm7", "Fm7", "Dm7b5", "G7", "Cm7", "Cm7"] },
+      { "label": "B", "bars": ["Ebm7", "Ab7", "Dbmaj7", "Dbmaj7", "Dm7b5", "G7", "Cm7", "Dm7b5 G7"] }
+    ]
+  },
+  {
+    "title": "So What",
+    "aliases": ["impressions"],
+    "composer": "Miles Davis",
+    "key": "D", "mode": "minor",
+    "form": "AABA, 32 bars (D Dorian / E♭ Dorian)",
+    "sections": [
+      { "label": "A", "bars": ["Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7"] },
+      { "label": "A", "bars": ["Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7"] },
+      { "label": "B", "bars": ["Ebm7", "Ebm7", "Ebm7", "Ebm7", "Ebm7", "Ebm7", "Ebm7", "Ebm7"] },
+      { "label": "A", "bars": ["Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7"] }
+    ]
+  },
+  {
+    "title": "Jazz Blues",
+    "aliases": ["blues", "f blues", "blues in f", "12 bar blues", "twelve bar blues", "jazz blues in f"],
+    "composer": "standard form",
+    "key": "F", "mode": "major",
+    "form": "12-bar blues",
+    "sections": [
+      { "label": "", "bars": ["F7", "Bb7", "F7", "Cm7 F7", "Bb7", "Bdim7", "F7", "Am7 D7", "Gm7", "C7", "F7 D7", "Gm7 C7"] }
+    ]
+  },
+  {
+    "title": "Rhythm Changes",
+    "aliases": ["i got rhythm", "rhythm"],
+    "composer": "from Gershwin's I Got Rhythm",
+    "key": "Bb", "mode": "major",
+    "form": "AABA, 32 bars",
+    "sections": [
+      { "label": "A", "bars": ["Bb6 G7", "Cm7 F7", "Bb6 G7", "Cm7 F7", "Fm7 Bb7", "Ebmaj7 Ebm6", "Dm7 G7", "Cm7 F7"] },
+      { "label": "A", "bars": ["Bb6 G7", "Cm7 F7", "Bb6 G7", "Cm7 F7", "Fm7 Bb7", "Ebmaj7 Ebm6", "Cm7 F7", "Bb6"] },
+      { "label": "B", "bars": ["D7", "D7", "G7", "G7", "C7", "C7", "F7", "F7"] },
+      { "label": "A", "bars": ["Bb6 G7", "Cm7 F7", "Bb6 G7", "Cm7 F7", "Fm7 Bb7", "Ebmaj7 Ebm6", "Cm7 F7", "Bb6"] }
+    ]
+  },
+  {
+    "title": "Take the 'A' Train",
+    "aliases": ["a train", "take the a train"],
+    "composer": "Billy Strayhorn",
+    "key": "C", "mode": "major",
+    "form": "AABA, 32 bars",
+    "sections": [
+      { "label": "A", "bars": ["C6", "C6", "D7#11", "D7#11", "Dm7", "G7", "C6", "Dm7 G7"] },
+      { "label": "A", "bars": ["C6", "C6", "D7#11", "D7#11", "Dm7", "G7", "C6", "C6"] },
+      { "label": "B", "bars": ["Fmaj7", "Fmaj7", "Fmaj7", "Fmaj7", "D7", "D7", "Dm7", "G7"] },
+      { "label": "A", "bars": ["C6", "C6", "D7#11", "D7#11", "Dm7", "G7", "C6", "C6"] }
+    ]
+  },
+  {
+    "title": "All the Things You Are",
+    "aliases": ["attya"],
+    "composer": "Jerome Kern",
+    "key": "Ab", "mode": "major",
+    "form": "AABA', 36 bars",
+    "sections": [
+      { "label": "A", "bars": ["Fm7", "Bbm7", "Eb7", "Abmaj7", "Dbmaj7", "Dm7 G7", "Cmaj7", "Cmaj7"] },
+      { "label": "A", "bars": ["Cm7", "Fm7", "Bb7", "Ebmaj7", "Abmaj7", "Am7b5 D7", "Gmaj7", "Gmaj7"] },
+      { "label": "B", "bars": ["Am7", "D7", "Gmaj7", "Gmaj7", "F#m7b5", "B7", "Emaj7", "C7#5"] },
+      { "label": "A'", "bars": ["Fm7", "Bbm7", "Eb7", "Abmaj7", "Dbmaj7", "Dbm7", "Cm7", "Bdim7", "Bbm7", "Eb7", "Abmaj7", "Gm7b5 C7"] }
+    ]
+  },
+  {
+    "title": "Satin Doll",
+    "aliases": [],
+    "composer": "Duke Ellington & Billy Strayhorn",
+    "key": "C", "mode": "major",
+    "form": "AABA, 32 bars",
+    "sections": [
+      { "label": "A", "bars": ["Dm7 G7", "Dm7 G7", "Em7 A7", "Em7 A7", "Am7 D7", "Abm7 Db7", "Cmaj7", "Cmaj7"] },
+      { "label": "A", "bars": ["Dm7 G7", "Dm7 G7", "Em7 A7", "Em7 A7", "Am7 D7", "Abm7 Db7", "Cmaj7", "Cmaj7"] },
+      { "label": "B", "bars": ["Gm7", "C7", "Fmaj7", "Fmaj7", "Am7", "D7", "Dm7", "G7"] },
+      { "label": "A", "bars": ["Dm7 G7", "Dm7 G7", "Em7 A7", "Em7 A7", "Am7 D7", "Abm7 Db7", "Cmaj7", "Cmaj7"] }
+    ]
+  },
+  {
+    "title": "Solar",
+    "aliases": [],
+    "composer": "Miles Davis",
+    "key": "C", "mode": "minor",
+    "form": "12 bars",
+    "sections": [
+      { "label": "", "bars": ["CmMaj7", "CmMaj7", "Gm7", "C7", "Fmaj7", "Fmaj7", "Fm7", "Bb7", "Ebmaj7", "Ebm7 Ab7", "Dbmaj7", "Dm7b5 G7"] }
+    ]
+  },
+  {
+    "title": "Mr. P.C.",
+    "aliases": ["mr pc"],
+    "composer": "John Coltrane",
+    "key": "C", "mode": "minor",
+    "form": "12-bar minor blues",
+    "sections": [
+      { "label": "", "bars": ["Cm7", "Cm7", "Cm7", "Cm7", "Fm7", "Fm7", "Cm7", "Cm7", "Ab7", "G7", "Cm7", "G7"] }
+    ]
+  },
+  {
+    "title": "Cantaloupe Island",
+    "aliases": [],
+    "composer": "Herbie Hancock",
+    "key": "F", "mode": "minor",
+    "form": "16 bars",
+    "sections": [
+      { "label": "", "bars": ["Fm7", "Fm7", "Fm7", "Fm7", "Db7", "Db7", "Db7", "Db7", "Dm7", "Dm7", "Dm7", "Dm7", "Fm7", "Fm7", "Fm7", "Fm7"] }
+    ]
+  },
+  {
+    "title": "Fly Me to the Moon",
+    "aliases": ["in other words"],
+    "composer": "Bart Howard",
+    "key": "C", "mode": "major",
+    "form": "AB AB', 32 bars",
+    "sections": [
+      { "label": "A", "bars": ["Am7", "Dm7", "G7", "Cmaj7 C7", "Fmaj7", "Bm7b5", "E7", "Am7 A7"] },
+      { "label": "B", "bars": ["Dm7", "G7", "Cmaj7 Am7", "Dm7", "G7", "Cmaj7", "Bm7b5", "E7"] },
+      { "label": "A", "bars": ["Am7", "Dm7", "G7", "Cmaj7 C7", "Fmaj7", "Bm7b5", "E7", "Am7 A7"] },
+      { "label": "B'", "bars": ["Dm7", "G7", "Em7 A7", "Dm7", "G7", "C6", "Bm7b5", "E7"] }
+    ]
+  }
+]

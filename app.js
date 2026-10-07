@@ -52,6 +52,67 @@ function renderToolTrace(tools) {
   chatEl.appendChild(details);
 }
 
+/* ---------- chord charts ---------- */
+
+// Pretty accidentals for display only: Bb7b9 → B♭7♭9, F#m7 → F♯m7.
+function prettyChord(c) {
+  return c
+    .replace(/^([A-G])b/, "$1♭")
+    .replace(/^([A-G])#/, "$1♯")
+    .replace(/\/([A-G])b/, "/$1♭")
+    .replace(/\/([A-G])#/, "/$1♯")
+    .replace(/b(5|9|13)/g, "♭$1")
+    .replace(/#(5|9|11)/g, "♯$1");
+}
+
+const isChartRow = (line) => (line.match(/\|/g) || []).length >= 3 && !/^\s*\|?\s*:?-{2,}/.test(line);
+
+/**
+ * Render chart text ("A  | Cm7 | F7 | Bbmaj7 | Ebmaj7 |") as a bar grid.
+ * Built with DOM methods + textContent, so model text is never parsed as HTML.
+ */
+function renderChart(text) {
+  const wrap = document.createElement("div");
+  wrap.className = "chart";
+  let titled = false;
+  for (const raw of text.split("\n")) {
+    const line = raw.trimEnd();
+    if (!line.trim()) continue;
+    if (!line.includes("|")) {
+      const t = document.createElement("div");
+      t.className = titled ? "chart-note" : "chart-title";
+      t.textContent = line.trim();
+      wrap.appendChild(t);
+      titled = true;
+      continue;
+    }
+    const parts = line.split("|");
+    const label = parts[0].trim();
+    const bars = parts.slice(1).map((b) => b.trim());
+    if (bars.length && bars[bars.length - 1] === "") bars.pop();
+
+    const row = document.createElement("div");
+    row.className = label ? "chart-row section-start" : "chart-row";
+    const lab = document.createElement("span");
+    lab.className = "chart-label";
+    lab.textContent = label;
+    row.appendChild(lab);
+    for (const bar of bars) {
+      const cell = document.createElement("span");
+      cell.className = "chart-bar";
+      for (const chord of bar.split(/\s+/).filter(Boolean)) {
+        const c = document.createElement("span");
+        c.className = "chord";
+        c.textContent = prettyChord(chord);
+        cell.appendChild(c);
+      }
+      row.appendChild(cell);
+    }
+    wrap.appendChild(row);
+  }
+  return wrap.outerHTML;
+}
+
 /**
  * Minimal markdown → HTML. Safe because EVERYTHING is HTML-escaped first; only the
  * tags this function itself adds can appear. Model output is untrusted input.
@@ -79,6 +140,28 @@ function renderMarkdown(src) {
     const line = lines[i];
 
     if (!line.trim()) { i++; continue; }
+
+    // Fenced code block. ```chart (or any block that looks like a chart) → chord grid.
+    const fence = line.match(/^\s*```\s*([\w-]*)/);
+    if (fence) {
+      const lang = fence[1].toLowerCase();
+      const body = [];
+      i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) { body.push(lines[i]); i++; }
+      i++; // skip closing fence
+      const text = body.join("\n");
+      if (lang === "chart" || body.filter(isChartRow).length >= 2) out.push(renderChart(text));
+      else out.push(`<pre class="code-block"><code>${esc(text)}</code></pre>`);
+      continue;
+    }
+
+    // Chart rows the model forgot to fence: 2+ consecutive "| x | y | z |" lines.
+    if (isChartRow(line) && i + 1 < lines.length && isChartRow(lines[i + 1])) {
+      const body = [];
+      while (i < lines.length && isChartRow(lines[i])) { body.push(lines[i]); i++; }
+      out.push(renderChart(body.join("\n")));
+      continue;
+    }
 
     // Headings → bold paragraph (keeps chat bubbles compact)
     const h = line.match(/^#{1,6}\s+(.*)$/);
@@ -126,7 +209,7 @@ function renderMarkdown(src) {
     while (
       i < lines.length &&
       lines[i].trim() &&
-      !/^(#{1,6}\s|\s*[-*•]\s+|\s*\d+[.)]\s+|\s*\|)/.test(lines[i])
+      !/^(#{1,6}\s|\s*[-*•]\s+|\s*\d+[.)]\s+|\s*\||\s*```)/.test(lines[i])
     ) {
       para.push(inline(lines[i]));
       i++;

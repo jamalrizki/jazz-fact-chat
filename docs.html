@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How Jazz Fact Chat Works</title>
   <meta name="description" content="The tools behind Jazz Fact Chat, when the model calls them, and how to use its MCP server.">
+  <meta name="theme-color" content="#050507">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Monoton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="docs">
@@ -21,7 +25,7 @@
         Jazz Fact Chat is a chat app backed by a free open-weight model (<code>gpt-oss-120b</code> on Groq,
         with OpenRouter's free models as a fallback). On its own, the model will confidently make up who played
         on a record. So it is given <strong>tools</strong>: small functions that fetch real data from
-        Wikipedia, MusicBrainz, and a curated fact list. The model decides when to use them, and answers from
+        Wikipedia, MusicBrainz, a curated fact list, and a library of chord charts. The model decides when to use them, and answers from
         what they return.
       </p>
       <p>
@@ -82,6 +86,7 @@
         <li><strong>"Who played drums on <em>Kind of Blue</em>?"</strong> → <code>album_lineup</code>. Any question about personnel or release year. The description says never to answer these from memory.</li>
         <li><strong>"Who was Mary Lou Williams?"</strong> → <code>lookup_musician</code>. Biography, dates, instruments, career.</li>
         <li><strong>"Tell me a fun jazz fact."</strong> → <code>random_jazz_fact</code>. Only for trivia requests, never to answer a specific question.</li>
+        <li><strong>"Chords for Autumn Leaves in E minor."</strong> → <code>chord_chart</code>. Changes come from a curated library and are transposed in code, not by the model, because transposition is exact arithmetic that models often get wrong. For tunes outside the library, the model writes a chart itself and labels it "from memory."</li>
         <li><strong>"What's a ii–V–I?"</strong> → no tool. General theory is something the model knows well enough.</li>
       </ul>
       <p>

@@ -16,6 +16,7 @@
  */
 
 import FACTS from "./jazz-facts.json" with { type: "json" };
+import CHARTS from "./chord-charts.json" with { type: "json" };
 
 // Wikipedia and MusicBrainz both ask API clients to identify themselves.
 const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/jamalrizki/jazz-fact-chat)";
@@ -83,6 +84,29 @@ export const TOOLS = [
     },
     annotations: { readOnlyHint: true, openWorldHint: false }, // local data only
     handler: randomJazzFact,
+  },
+  {
+    name: "chord_chart",
+    title: "Chord chart for a jazz standard",
+    description:
+      "Return the chord changes for a jazz standard from a curated library, optionally transposed to any key. " +
+      "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
+      "Copy the returned chart_text into your reply inside a ```chart code block exactly as given. " +
+      "If the tune isn't in the library, the result lists the tunes that are.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tune: { type: "string", description: "Tune title, e.g. \"Autumn Leaves\" or \"rhythm changes\"." },
+        key: {
+          type: "string",
+          description: "Optional target key, e.g. \"F\", \"Bb\", \"F#\". Omit to use the tune's usual key.",
+        },
+      },
+      required: ["tune"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: chordChart,
   },
 ];
 
@@ -252,6 +276,110 @@ async function randomJazzFact({ topic = "any" }) {
   const list = pool.length ? pool : FACTS;
   const pick = list[Math.floor(Math.random() * list.length)];
   return { source: "curated list", topic: pick.topic, fact: pick.fact };
+}
+
+/* ---------- chord charts ----------
+ * Transposition lives in code, not in the model, on purpose: it's exact
+ * arithmetic, and LLMs routinely botch it (wrong accidentals, dropped bars).
+ * A tool is the right home for anything deterministic.
+ */
+
+const PITCH = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const SHARP_MAJOR_KEYS = new Set(["G", "D", "A", "E", "B", "F#", "C#"]);
+const SHARP_MINOR_KEYS = new Set(["E", "B", "F#", "C#", "G#", "D#", "A#"]);
+
+function noteToPc(letter, accidental) {
+  return (PITCH[letter] + (accidental === "#" ? 1 : accidental === "b" ? -1 : 0) + 12) % 12;
+}
+
+function parseKey(input) {
+  const m = String(input).trim().match(/^([A-Ga-g])\s*(#|♯|sharp|b|♭|flat)?/i);
+  if (!m) return null;
+  const letter = m[1].toUpperCase();
+  const acc = !m[2] ? "" : /^(#|♯|sharp)$/i.test(m[2]) ? "#" : "b";
+  return { pc: noteToPc(letter, acc), name: letter + acc };
+}
+
+function transposeChord(chord, semis, names) {
+  const m = chord.match(/^([A-G])([b#]?)(.*?)(?:\/([A-G])([b#]?))?$/);
+  if (!m) return chord; // leave anything unexpected untouched
+  const [, root, rootAcc, quality, bass, bassAcc] = m;
+  const out = names[(noteToPc(root, rootAcc) + semis + 12) % 12] + quality;
+  return bass ? `${out}/${names[(noteToPc(bass, bassAcc) + semis + 12) % 12]}` : out;
+}
+
+function normalizeTitle(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\bthe\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findChart(tune) {
+  const q = normalizeTitle(tune);
+  const names = (c) => [c.title, ...(c.aliases || [])].map(normalizeTitle);
+  return (
+    CHARTS.find((c) => names(c).includes(q)) ||
+    (q.length >= 4 ? CHARTS.find((c) => names(c).some((n) => n.includes(q) || q.includes(n))) : undefined)
+  );
+}
+
+async function chordChart({ tune, key }) {
+  tune = requireString(tune, "tune", 100);
+  const chart = findChart(tune);
+  if (!chart) {
+    return {
+      found: false,
+      message: `"${tune}" isn't in the curated chord-chart library.`,
+      available: CHARTS.map((c) => c.title),
+    };
+  }
+
+  const original = parseKey(chart.key);
+  let target = original;
+  if (key !== undefined && key !== null && key !== "") {
+    target = parseKey(requireString(key, "key", 20));
+    if (!target) throw new Error(`"${key}" is not a key I understand. Use a note name like F, Bb, or F#.`);
+  }
+  const semis = (target.pc - original.pc + 12) % 12;
+  const sharpSet = chart.mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
+  const useSharps = sharpSet.has(target.name);
+  const names = useSharps ? SHARP_NAMES : FLAT_NAMES;
+  const keyName = semis === 0 ? chart.key : names[target.pc];
+
+  const sections = chart.sections.map((sec) => ({
+    label: sec.label,
+    bars: sec.bars.map((bar) =>
+      semis === 0 ? bar : bar.split(" ").map((c) => transposeChord(c, semis, names)).join(" ")
+    ),
+  }));
+
+  const totalBars = sections.reduce((n, s) => n + s.bars.length, 0);
+  const keyLabel = `${keyName} ${chart.mode}`;
+  const lines = [`${chart.title} (${chart.composer}) · ${keyLabel} · ${chart.form}`];
+  for (const sec of sections) {
+    for (let i = 0; i < sec.bars.length; i += 4) {
+      const label = (i === 0 ? sec.label : "").padEnd(2, " ");
+      lines.push(`${label} | ${sec.bars.slice(i, i + 4).join(" | ")} |`);
+    }
+  }
+
+  return {
+    found: true,
+    source: "curated chord library",
+    title: chart.title,
+    composer: chart.composer,
+    key: keyLabel,
+    transposed: semis !== 0,
+    form: chart.form,
+    bars: totalBars,
+    chart_text: lines.join("\n"),
+    note: "Common changes as typically played. Published versions and players' reharmonizations vary.",
+  };
 }
 
 /* ---------- helpers ---------- */
