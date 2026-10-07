@@ -102,13 +102,14 @@ export function parseMusic(music) {
   let lastChord = null;
   let repeatStart = null; // index into bars where "{" began
   let ending1Start = null;
+  let sectionStart = 0; // bar index of the latest double bar "[" (fallback repeat target)
+  let repeatClosed = false; // a "}" was seen since the last "{"; the next N1 starts a new structure
   const notes = new Set();
   let time = null;
 
   const closeBar = () => {
-    if (cur.chords.length) {
-      bars.push(cur);
-    }
+    if (cur.chords.length) bars.push(cur);
+    else if (cur.label && !pendingLabel) pendingLabel = cur.label; // keep a label that preceded a bar line
     cur = { label: "", chords: [] };
   };
   const startBar = () => {
@@ -160,22 +161,28 @@ export function parseMusic(music) {
     if ((m = rest.match(/^N(\d)/))) {
       closeBar();
       const n = Number(m[1]);
-      if (n === 1) ending1Start = bars.length;
-      else if (repeatStart !== null && ending1Start !== null) {
-        // Second (or third) ending: replay the repeated part up to ending 1, then continue.
-        bars.push(...copyBars(repeatStart, ending1Start));
+      if (n === 1) {
+        if (repeatClosed) { repeatStart = null; repeatClosed = false; }
+        ending1Start = bars.length;
       }
+      // N2/N3 need nothing here: the replay already happened at "}".
       i += 2; continue;
     }
-    if (rest[0] === "{") { closeBar(); repeatStart = bars.length; ending1Start = null; startBar(); i += 1; continue; }
+    if (rest[0] === "{") { closeBar(); repeatStart = bars.length; ending1Start = null; repeatClosed = false; startBar(); i += 1; continue; }
     if (rest[0] === "}") {
       closeBar();
-      if (repeatStart !== null && ending1Start === null) bars.push(...copyBars(repeatStart, bars.length));
-      // with endings, the replay happens at N2
+      // Replay the repeated bars right here: up to the 1st ending if there is one,
+      // otherwise the whole repeated passage. The 2nd ending (labeled N2 or not) follows.
+      // No "{" means the repeat goes back to the last double bar (or the top).
+      const from = repeatStart ?? sectionStart;
+      bars.push(...copyBars(from, ending1Start ?? bars.length));
+      if (ending1Start === null) repeatStart = null;
+      repeatClosed = true;
       i += 1; continue;
     }
     if (rest.startsWith("LZ") || "|[]Z".includes(rest[0])) {
       closeBar();
+      if (rest[0] === "[") sectionStart = bars.length;
       startBar();
       i += rest.startsWith("LZ") ? 2 : 1; continue;
     }
