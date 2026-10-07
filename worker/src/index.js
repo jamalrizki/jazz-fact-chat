@@ -28,11 +28,24 @@ const MAX_CHARS_PER_MESSAGE = 4000;
 const UPSTREAM_TIMEOUT_MS = 25000;
 const MAX_TOOL_ROUNDS = 4; // stops a confused model from looping on tools forever
 
+// Some models (often ones picked by a free router) write a tool call out as text
+// instead of using the structured tool_calls field. Never show that to the user.
+const LEAKED_TOOL_MARKUP = /<\/?[\w-]*(function_call|tool_call|invoke|parameter)\b|<\|[^|>]*\|>/i;
+
+function stripToolMarkup(text) {
+  return text
+    .replace(/<([\w-]*(?:function_call|tool_call))\b[\s\S]*?<\/\1>/gi, "")
+    .replace(/<\/?[\w-]*(?:function_call|tool_call|invoke|parameter)\b[^>]*>/gi, "")
+    .replace(/<\|[^|>]*\|>/g, "")
+    .trim();
+}
+
 const SYSTEM_PROMPT = `You are Jazz Fact Chat, a friendly expert on jazz: musicians, albums, history, and theory.
 
 Tools:
 - album_lineup: ALWAYS call it for any question about who played on an album, its lineup, or its release year. Never state album personnel or release years from memory.
 - lookup_musician: call it for biographical questions (who someone is, dates, instrument, career).
+- artist_albums: call it ONCE when the user asks what records/albums someone has. Never guess album titles and test them one by one with album_lineup.
 - random_jazz_fact: call it only when the user asks for a fun fact or trivia.
 - chord_chart: call it whenever the user asks for the chords, changes, or a chart for a tune. Pass the key if they name one.
 - Music theory questions usually need no tool.
@@ -98,15 +111,38 @@ async function runConversation(messages, env) {
   const trace = []; // what we report back to the browser so you can see the loop happen
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    // On the final round, tool_choice "none" forces a text answer.
-    const toolChoice = round < MAX_TOOL_ROUNDS ? "auto" : "none";
-    const { message, provider, model } = await chatWithFallback(convo, env, mcp.openAITools, toolChoice);
+    // On the final round, tool_choice "none" forces a text answer, and we say so explicitly:
+    // some models ignore tool_choice and try to write a tool call as text instead.
+    const finalRound = round === MAX_TOOL_ROUNDS;
+    if (finalRound) {
+      convo.push({
+        role: "system",
+        content: "Tool budget used up. Answer the user now in plain text using only the tool results above. Do not call or write out any tool calls.",
+      });
+    }
+    const toolChoice = finalRound ? "none" : "auto";
+    let { message, provider, model } = await chatWithFallback(convo, env, mcp.openAITools, toolChoice);
 
     const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
 
     // No tool calls means the model is done: this is the answer.
     if (calls.length === 0) {
-      const reply = (message.content || "").trim();
+      let reply = (message.content || "").trim();
+      if (LEAKED_TOOL_MARKUP.test(reply)) {
+        // Retry once, forcing plain text.
+        console.warn(`${provider}/${model} wrote tool-call markup as text; retrying once`);
+        const retry = await chatWithFallback(
+          [...convo, { role: "system", content: "Your last reply contained raw tool-call markup. Reply again in plain text only, using the tool results above." }],
+          env, mcp.openAITools, "none"
+        );
+        ({ provider, model } = retry);
+        reply = stripToolMarkup((retry.message.content || "").trim());
+        if (reply.length < 40) {
+          reply = trace.length
+            ? "Sorry, I gathered some data but couldn't put an answer together. Expand the tool trace below to see what came back, or ask again."
+            : "Sorry, something went wrong putting an answer together. Please ask again.";
+        }
+      }
       if (!reply) throw new Error("Empty reply from model");
       return { reply, provider, model, tools: trace };
     }

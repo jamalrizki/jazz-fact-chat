@@ -76,7 +76,7 @@ async function loadTools() {
   } catch (err) {
     statusEl.textContent =
       "Couldn't reach the MCP server right now, so the live tool list isn't shown. " +
-      "The tools are lookup_musician, album_lineup, random_jazz_fact, and chord_chart.";
+      "The tools are lookup_musician, album_lineup, artist_albums, random_jazz_fact, and chord_chart.";
     statusEl.classList.add("warn");
     console.error(err);
   }

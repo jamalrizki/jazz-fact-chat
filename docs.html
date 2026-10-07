@@ -85,6 +85,7 @@
       <ul>
         <li><strong>"Who played drums on <em>Kind of Blue</em>?"</strong> → <code>album_lineup</code>. Any question about personnel or release year. The description says never to answer these from memory.</li>
         <li><strong>"Who was Mary Lou Williams?"</strong> → <code>lookup_musician</code>. Biography, dates, instruments, career.</li>
+        <li><strong>"Name some Brian Blade records."</strong> → <code>artist_albums</code>. One MusicBrainz search for every album credited to the artist (including bands named after them), with years. The model is told never to guess titles and check them one by one.</li>
         <li><strong>"Tell me a fun jazz fact."</strong> → <code>random_jazz_fact</code>. Only for trivia requests, never to answer a specific question.</li>
         <li><strong>"Chords for Autumn Leaves in E minor."</strong> → <code>chord_chart</code>. Changes come from a curated library and are transposed in code, not by the model, because transposition is exact arithmetic that models often get wrong. For tunes outside the library, the model says so and suggests ones it has. It doesn't guess, because a confident-looking wrong chart is worse than none.</li>
         <li><strong>"What's a ii–V–I?"</strong> → no tool. General theory is something the model knows well enough.</li>

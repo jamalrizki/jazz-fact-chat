@@ -66,6 +66,24 @@ export const TOOLS = [
     handler: albumLineup,
   },
   {
+    name: "artist_albums",
+    title: "An artist's albums",
+    description:
+      "List albums released under an artist's name (as leader or co-leader, including bands named after them) from MusicBrainz, with years. " +
+      "Use this ONCE whenever the user asks what records, albums, or discography someone has. " +
+      "Never guess album titles and check them one by one with album_lineup. Sideman appearances are not included.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        artist: { type: "string", description: "Artist name, e.g. \"Brian Blade\"." },
+      },
+      required: ["artist"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    handler: artistAlbums,
+  },
+  {
     name: "random_jazz_fact",
     title: "Random jazz fact",
     description:
@@ -232,6 +250,48 @@ async function albumLineup({ album, artist }) {
       best.personnel.length === 0
         ? "MusicBrainz lists this album but has no personnel credits for it. Tell the user that; do not fill in names from memory."
         : undefined,
+  };
+}
+
+async function artistAlbums({ artist }) {
+  artist = requireString(artist, "artist", 100);
+  const name = artist.replace(/["\\]/g, " ").trim();
+  // One search over album release groups whose artist credit contains the name, so
+  // "Brian Blade" also finds "Brian Blade Fellowship" and "Brian Blade & The Fellowship Band".
+  const query = `artist:"${name}" AND primarytype:album`;
+  const data = await getJson(
+    "https://musicbrainz.org/ws/2/release-group?fmt=json&limit=100&query=" + encodeURIComponent(query)
+  );
+  const seen = new Set();
+  const albums = [];
+  for (const g of data?.["release-groups"] || []) {
+    if ((g.score ?? 0) < 70) continue;
+    const credit = (g["artist-credit"] || []).map((c) => c.name + (c.joinphrase || "")).join("").trim();
+    if (!credit.toLowerCase().includes(name.toLowerCase())) continue;
+    const secondary = g["secondary-types"] || [];
+    if (secondary.some((t) => ["Compilation", "Soundtrack", "Interview", "Spokenword", "DJ-mix", "Remix"].includes(t))) continue;
+    const key = g.title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const date = g["first-release-date"] || "";
+    albums.push({
+      title: g.title,
+      credited_to: credit,
+      year: date ? Number(date.slice(0, 4)) : null,
+      live: secondary.includes("Live") || undefined,
+    });
+  }
+  if (albums.length === 0) {
+    return { found: false, message: `MusicBrainz lists no albums credited to "${artist}". Say so; do not list titles from memory.` };
+  }
+  albums.sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+  return {
+    found: true,
+    source: "MusicBrainz",
+    artist,
+    count: albums.length,
+    albums: albums.slice(0, 40),
+    note: "Albums credited to this artist as leader or co-leader. Sideman work (often a large part of a player's discography) is not included; say so if relevant.",
   };
 }
 
