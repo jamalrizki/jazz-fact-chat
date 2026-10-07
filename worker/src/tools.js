@@ -92,7 +92,7 @@ export const TOOLS = [
       "Return the chord changes for a jazz standard from a curated library, optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
       "Copy the returned chart_text into your reply inside a ```chart code block exactly as given. " +
-      "If the tune isn't in the library, the result lists the tunes that are.",
+      "If the tune isn't in the library, the result lists the tunes that are; never improvise a chart instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -334,7 +334,7 @@ async function chordChart({ tune, key }) {
   if (!chart) {
     return {
       found: false,
-      message: `"${tune}" isn't in the curated chord-chart library.`,
+      message: `"${tune}" isn't in the curated chord-chart library. Tell the user that and suggest tunes from "available". Do not write a chart for it from memory.`,
       available: CHARTS.map((c) => c.title),
     };
   }
