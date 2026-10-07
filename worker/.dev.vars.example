@@ -2,3 +2,5 @@
 # wrangler dev loads .dev.vars automatically; production uses `wrangler secret put`.
 GROQ_API_KEY=gsk_your_key_here
 OPENROUTER_API_KEY=sk-or-your_key_here
+# Optional: lets search_jazz also search All About Jazz, Discogs and jazzdisco.org (free at tavily.com, no card)
+TAVILY_API_KEY=tvly-your_key_here

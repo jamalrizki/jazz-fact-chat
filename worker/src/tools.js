@@ -21,7 +21,7 @@ import CHARTS from "./chord-charts.json" with { type: "json" };
 // Wikipedia and MusicBrainz both ask API clients to identify themselves.
 const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/jamalrizki/jazz-fact-chat)";
 const FETCH_TIMEOUT_MS = 8000;
-const MAX_RESULT_CHARS = 4000; // tool results cost tokens on every later model round
+const MAX_RESULT_CHARS = 5000; // tool results cost tokens on every later model round
 
 /* ---------- definitions ---------- */
 
@@ -66,22 +66,24 @@ export const TOOLS = [
     handler: albumLineup,
   },
   {
-    name: "artist_albums",
-    title: "An artist's albums",
+    name: "search_jazz",
+    title: "Search jazz sources",
     description:
-      "List albums released under an artist's name (as leader or co-leader, including bands named after them) from MusicBrainz, with years. " +
-      "Use this ONCE whenever the user asks what records, albums, or discography someone has. " +
-      "Never guess album titles and check them one by one with album_lineup. Sideman appearances are not included.",
+      "General jazz research. Searches Wikipedia, plus All About Jazz, Discogs and the Jazz Discography Project " +
+      "when available, and returns the most relevant passages with their URLs. Use it whenever you're not sure of " +
+      "an answer, for anything specific or obscure (who a player recorded with, what albums someone played on, " +
+      "how many records two musicians made together, session dates), and as the fallback when another tool finds nothing. " +
+      "Write a focused query, e.g. \"Miles Davis John Coltrane albums together\".",
     inputSchema: {
       type: "object",
       properties: {
-        artist: { type: "string", description: "Artist name, e.g. \"Brian Blade\"." },
+        query: { type: "string", description: "What to look up, in plain words." },
       },
-      required: ["artist"],
+      required: ["query"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: true },
-    handler: artistAlbums,
+    handler: searchJazz,
   },
   {
     name: "random_jazz_fact",
@@ -143,14 +145,14 @@ export function publicDefinition({ name, title, description, inputSchema, annota
  * Run one tool. Never throws: returns { result, isError }. A failure comes back
  * as data so the model can read what went wrong and tell the user.
  */
-export async function runTool(name, args) {
+export async function runTool(name, args, env = {}) {
   const tool = BY_NAME.get(name);
   if (!tool) return { result: { error: `Unknown tool "${name}".` }, isError: true };
   if (args === null || typeof args !== "object" || Array.isArray(args)) {
     return { result: { error: "Tool arguments must be a JSON object." }, isError: true };
   }
   try {
-    return { result: await tool.handler(args), isError: false };
+    return { result: await tool.handler(args, env), isError: false };
   } catch (err) {
     return { result: { error: `${name} failed: ${err.message}` }, isError: true };
   }
@@ -253,45 +255,116 @@ async function albumLineup({ album, artist }) {
   };
 }
 
-async function artistAlbums({ artist }) {
-  artist = requireString(artist, "artist", 100);
-  const name = artist.replace(/["\\]/g, " ").trim();
-  // One search over album release groups whose artist credit contains the name, so
-  // "Brian Blade" also finds "Brian Blade Fellowship" and "Brian Blade & The Fellowship Band".
-  const query = `artist:"${name}" AND primarytype:album`;
-  const data = await getJson(
-    "https://musicbrainz.org/ws/2/release-group?fmt=json&limit=100&query=" + encodeURIComponent(query)
+/* ---------- general search (the fallback) ---------- */
+
+const STOPWORDS = new Set(("the and for with who what when where which how many much did does was were are " +
+  "his her their about from that this have has had any some other play played playing record records").split(" "));
+const SEARCH_SITES = ["allaboutjazz.com", "en.wikipedia.org", "discogs.com", "jazzdisco.org"];
+
+function queryTerms(q) {
+  return [...new Set(q.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !STOPWORDS.has(w)))];
+}
+
+/** Pick the passages of a Wikipedia article most relevant to the query. */
+export function relevantExcerpt(text, query, limit = 1400) {
+  const terms = queryTerms(query);
+  const wantsRecords = /album|record|discograph|played on|sideman|session|lineup|personnel/i.test(query);
+  const parts = text.split(/\n(={2,})\s*(.+?)\s*\1\n/);
+  const intro = parts[0].trim();
+  const sections = [];
+  for (let i = 1; i + 2 < parts.length + 1; i += 3) {
+    sections.push({ title: parts[i + 1], body: (parts[i + 2] || "").trim() });
+  }
+  const score = (sec) => {
+    const t = sec.title.toLowerCase();
+    const b = sec.body.toLowerCase();
+    let sc = terms.reduce((n, w) => n + (t.includes(w) ? 3 : 0) + Math.min(b.split(w).length - 1, 5), 0);
+    if (wantsRecords && /discograph|personnel|recordings|albums|as sideman|as leader/.test(t)) sc += 6;
+    return sc;
+  };
+  // Within a long section, lines that mention the query come first.
+  const condense = (body, max) => {
+    if (body.length <= max) return body;
+    const lines = body.split("\n").filter(Boolean);
+    const hit = lines.filter((l) => terms.some((w) => l.toLowerCase().includes(w)));
+    const rest = lines.filter((l) => !hit.includes(l));
+    return [...hit, ...rest].join("\n").slice(0, max) + "…";
+  };
+  const top = sections
+    .filter((s) => s.body)
+    .map((s) => ({ ...s, sc: score(s) }))
+    .filter((s) => s.sc > 0)
+    .sort((a, b) => b.sc - a.sc)
+    .slice(0, 2);
+  let out = condense(intro, 500);
+  for (const s of top) out += `\n\n## ${s.title}\n` + condense(s.body, Math.max(200, (limit - out.length) / 2));
+  return out.slice(0, limit);
+}
+
+async function wikipediaSearch(query) {
+  const search = await getJson(
+    "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=3&srsearch=" +
+      encodeURIComponent(query)
   );
-  const seen = new Set();
-  const albums = [];
-  for (const g of data?.["release-groups"] || []) {
-    if ((g.score ?? 0) < 70) continue;
-    const credit = (g["artist-credit"] || []).map((c) => c.name + (c.joinphrase || "")).join("").trim();
-    if (!credit.toLowerCase().includes(name.toLowerCase())) continue;
-    const secondary = g["secondary-types"] || [];
-    if (secondary.some((t) => ["Compilation", "Soundtrack", "Interview", "Spokenword", "DJ-mix", "Remix"].includes(t))) continue;
-    const key = g.title.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const date = g["first-release-date"] || "";
-    albums.push({
-      title: g.title,
-      credited_to: credit,
-      year: date ? Number(date.slice(0, 4)) : null,
-      live: secondary.includes("Live") || undefined,
-    });
+  const hits = (search?.query?.search || []).slice(0, 2);
+  const pages = await Promise.all(
+    hits.map(async (h) => {
+      const data = await getJson(
+        "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exsectionformat=wiki" +
+          "&redirects=1&format=json&titles=" + encodeURIComponent(h.title)
+      );
+      const page = Object.values(data?.query?.pages || {})[0];
+      if (!page?.extract) return null;
+      return {
+        source: "Wikipedia",
+        title: page.title,
+        url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(page.title.replace(/ /g, "_")),
+        excerpt: relevantExcerpt(page.extract, query),
+      };
+    })
+  );
+  return pages.filter(Boolean);
+}
+
+async function webSearch(query, apiKey) {
+  // Tavily: a search API built for LLM apps (free tier, no card). Restricted to jazz reference sites.
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ query, max_results: 4, search_depth: "basic", include_domains: SEARCH_SITES }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`search HTTP ${res.status}`);
+  const data = await res.json();
+  return (data.results || []).map((r) => ({
+    source: new URL(r.url).hostname.replace(/^www\./, ""),
+    title: r.title,
+    url: r.url,
+    excerpt: String(r.content || "").slice(0, 450),
+  }));
+}
+
+async function searchJazz({ query }, env = {}) {
+  query = requireString(query, "query", 200);
+  const [wiki, web] = await Promise.allSettled([
+    wikipediaSearch(query),
+    env.TAVILY_API_KEY ? webSearch(query, env.TAVILY_API_KEY) : Promise.resolve([]),
+  ]);
+  const results = [
+    ...(web.status === "fulfilled" ? web.value : []),
+    ...(wiki.status === "fulfilled" ? wiki.value : []),
+  ];
+  if (results.length === 0) {
+    return {
+      found: false,
+      message: "No sources found for that. Tell the user you couldn't find it, and don't guess.",
+    };
   }
-  if (albums.length === 0) {
-    return { found: false, message: `MusicBrainz lists no albums credited to "${artist}". Say so; do not list titles from memory.` };
-  }
-  albums.sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
   return {
     found: true,
-    source: "MusicBrainz",
-    artist,
-    count: albums.length,
-    albums: albums.slice(0, 40),
-    note: "Albums credited to this artist as leader or co-leader. Sideman work (often a large part of a player's discography) is not included; say so if relevant.",
+    query,
+    results,
+    note: "Answer from these excerpts and name the site you used. If they don't actually contain the answer, say so instead of guessing.",
   };
 }
 

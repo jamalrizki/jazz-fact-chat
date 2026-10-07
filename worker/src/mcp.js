@@ -44,7 +44,7 @@ const INVALID_PARAMS = -32602;
  * Handle one JSON-RPC message. Returns a response object, or null for a
  * notification (notifications never get a reply).
  */
-export async function handleRpc(msg) {
+export async function handleRpc(msg, env = {}) {
   if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") {
     return rpcError(msg?.id ?? null, INVALID_REQUEST, "Invalid Request");
   }
@@ -88,7 +88,7 @@ export async function handleRpc(msg) {
       }
       // ...but a tool that runs and fails is a normal *result* with isError: true,
       // so the model gets to see the failure and react to it.
-      const { result, isError } = await runTool(name, args);
+      const { result, isError } = await runTool(name, args, env); // env carries secrets like TAVILY_API_KEY
       return rpcResult(id, {
         content: [{ type: "text", text: serializeResult(result) }], // for any client/LLM
         structuredContent: result, // machine-readable copy for clients that support it
@@ -111,7 +111,7 @@ function rpcError(id, code, message) {
 
 /* ---------- HTTP transport layer ---------- */
 
-export async function handleMcpHttp(request, { allowedOrigins, cors }) {
+export async function handleMcpHttp(request, { allowedOrigins, cors, env }) {
   // DNS-rebinding protection (required by the spec): if a *browser* sends this
   // request, its Origin must be one we trust. Desktop/CLI MCP clients send no
   // Origin header and are allowed.
@@ -142,11 +142,11 @@ export async function handleMcpHttp(request, { allowedOrigins, cors }) {
     if (body.length === 0 || body.length > 20) {
       return jsonResponse(rpcError(null, INVALID_REQUEST, "Invalid batch"), 400, cors);
     }
-    const replies = (await Promise.all(body.map(handleRpc))).filter(Boolean);
+    const replies = (await Promise.all(body.map((m) => handleRpc(m, env)))).filter(Boolean);
     return replies.length ? jsonResponse(replies, 200, cors) : new Response(null, { status: 202, headers: cors });
   }
 
-  const reply = await handleRpc(body);
+  const reply = await handleRpc(body, env);
   if (!reply) return new Response(null, { status: 202, headers: cors }); // notification accepted
   return jsonResponse(reply, 200, cors);
 }

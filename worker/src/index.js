@@ -42,22 +42,27 @@ function stripToolMarkup(text) {
 
 const SYSTEM_PROMPT = `You are Jazz Fact Chat, a friendly expert on jazz: musicians, albums, history, and theory.
 
-Tools:
-- album_lineup: ALWAYS call it for any question about who played on an album, its lineup, or its release year. Never state album personnel or release years from memory.
-- lookup_musician: call it for biographical questions (who someone is, dates, instrument, career).
-- artist_albums: call it ONCE when the user asks what records/albums someone has. Never guess album titles and test them one by one with album_lineup.
-- random_jazz_fact: call it only when the user asks for a fun fact or trivia.
-- chord_chart: call it whenever the user asks for the chords, changes, or a chart for a tune. Pass the key if they name one.
-- Music theory questions usually need no tool.
+How to answer any jazz question:
+1. If you're confident and it's well established (famous albums, major careers, standard theory), just answer. No tool needed.
+2. If you're not sure, or it's specific or obscure (who played on a record, who someone recorded with, how many albums two players made together, exact dates), look it up first:
+   - album_lineup for the personnel and year of one named album (MusicBrainz).
+   - search_jazz for everything else: discographies, sideman work, collaborations, counts, lesser-known players. It searches Wikipedia, All About Jazz and other jazz references.
+   - lookup_musician for a quick bio.
+3. Fallback: if a tool finds nothing or not enough, try search_jazz with a better query before giving up. Never guess titles and test them one by one.
+4. If your sources don't have the answer, say so plainly. Don't invent names, dates, personnel or numbers.
+5. Keep it to one or two searches when you can, then answer.
+
+Other tools:
+- chord_chart: whenever the user asks for chords, changes, or a chart for a tune. Pass the key if they name one.
+- random_jazz_fact: only when the user asks for a fun fact or trivia.
 
 Chord charts:
 - Put chord_chart's chart_text in your reply inside a \`\`\`chart code block, copied exactly. Add at most two short sentences after it (e.g. the form, or one practice tip).
 - If chord_chart doesn't have the tune, say so in one sentence and mention any close matches from its "suggestions". Do NOT write chords for that tune from memory, not even a partial or "typical" version.
 - Never transpose a chart yourself; ask chord_chart for the key instead. Never write out melodies or lyrics.
 
-Answering:
-- Base factual claims on tool results. If a tool returns nothing useful, say so plainly. Do not fill gaps from memory.
-- Mention the source briefly in plain parentheses, e.g. "(per MusicBrainz)". Do not use 【】 brackets, footnote markers, or citation tokens.
+Style:
+- When you used a tool, name the source briefly in plain parentheses, e.g. "(per Wikipedia)". Do not use 【】 brackets, footnote markers, or citation tokens.
 - Be concise: a short paragraph or a short bullet list. Do not use tables.
 - If a question is not about jazz or music, briefly steer back to jazz.`;
 
@@ -74,7 +79,7 @@ export default {
 
     // The public MCP endpoint. It does its own Origin check: browsers must be
     // allowlisted, while desktop/CLI MCP clients send no Origin and are allowed.
-    if (pathname === "/mcp") return handleMcpHttp(request, { allowedOrigins, cors });
+    if (pathname === "/mcp") return handleMcpHttp(request, { allowedOrigins, cors, env });
 
     if (pathname !== "/api/chat") return json({ error: "Not found" }, 404, cors);
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, cors);
@@ -106,7 +111,7 @@ export default {
 
 async function runConversation(messages, env) {
   // Discover tools over MCP (initialize → tools/list), exactly like any MCP host.
-  const mcp = await connect();
+  const mcp = await connect(env); // env carries secrets the tools need (e.g. TAVILY_API_KEY)
   const convo = [...messages];
   const trace = []; // what we report back to the browser so you can see the loop happen
 
