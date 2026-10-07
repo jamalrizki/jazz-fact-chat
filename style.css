@@ -1,4 +1,4 @@
-/* Jazz Fact Chat — black + neon.
+/* Jazz Fact Chat — black + neon green.
  * To try a different neon, change --neon and --neon-rgb (the same color as "r, g, b").
  */
 :root {
@@ -9,12 +9,12 @@
   --ink: #ecebf2;
   --muted: #8b8a99;
   --border: #24232d;
-  --neon: #ff2ec4;          /* hot neon magenta */
-  --neon-rgb: 255, 46, 196;
-  --on-neon: #0a0008;       /* text on neon fills */
+  --neon: #39ff14;          /* neon green */
+  --neon-rgb: 57, 255, 20;
+  --on-neon: #031000;       /* text on neon fills */
   --error: #ff6b6b;
   --glow: 0 0 6px rgba(var(--neon-rgb), 0.65), 0 0 18px rgba(var(--neon-rgb), 0.35);
-  --font-display: "Monoton", "Space Grotesk", system-ui, sans-serif;
+  --font-display: "Tilt Neon", "Space Grotesk", system-ui, sans-serif;
   --font-body: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -52,10 +52,10 @@ h1 {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: clamp(1.7rem, 6vw, 2.6rem);
-  letter-spacing: 0.04em;
-  line-height: 1.15;
-  color: #ffe6f8;
+  font-size: clamp(2rem, 7vw, 3rem);
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  color: #eaffe4;
   text-shadow: var(--glow), 0 0 42px rgba(var(--neon-rgb), 0.25);
 }
 .tagline { margin: 6px 0 0; color: var(--muted); }
