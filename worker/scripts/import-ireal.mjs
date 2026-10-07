@@ -3,6 +3,7 @@
  * Import iReal Pro exports into the chord_chart library.
  *
  *   npm run import -- ../../my-playlist.html [more files...]
+ *   npm run import -- --only jazz ../../main-playlists.html   (only playlists whose name contains "jazz")
  *
  * Reads iReal Pro "irealb://" exports (the HTML file or a text file holding the
  * link), converts every song to the app's chart format, and writes
@@ -44,13 +45,15 @@ function unscramble(s) {
   return r + s;
 }
 
-export function decodeExport(text) {
+export function decodeExport(text, only = null) {
   const links = [...text.matchAll(/irealb:\/\/([^"'\s<>]+)/g)].map((m) => decodeURIComponent(m[1]));
   if (links.length === 0) throw new Error("No irealb:// link found. Export in iReal Pro format (HTML), not PDF or MusicXML.");
   const songs = [];
   for (const link of links) {
     const parts = link.split("===");
-    if (parts.length > 1 && !parts[parts.length - 1].includes(MUSIC_PREFIX)) parts.pop(); // playlist name
+    const name = parts.length > 1 && !parts[parts.length - 1].includes(MUSIC_PREFIX) ? parts.pop() : "";
+    if (only && !name.toLowerCase().includes(only.toLowerCase())) continue;
+    if (name) console.log(`Reading playlist "${name}" (${parts.length} songs)`);
     for (const raw of parts) {
       const fields = raw.split("=");
       const musicIdx = fields.findIndex((f) => f.startsWith(MUSIC_PREFIX));
@@ -260,15 +263,21 @@ function normalize(t) {
   return t.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\bthe\b/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function main(files) {
+function main(args) {
+  let only = null;
+  const files = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--only") only = args[++i];
+    else files.push(args[i]);
+  }
   if (!files.length) {
-    console.error("Usage: npm run import -- <ireal-export.html> [more files...]");
+    console.error("Usage: npm run import -- [--only <playlist name>] <ireal-export.html> [more files...]");
     process.exit(1);
   }
   const imported = [];
   const failed = [];
   for (const f of files) {
-    for (const song of decodeExport(readFileSync(f, "utf8"))) {
+    for (const song of decodeExport(readFileSync(f, "utf8"), only)) {
       try { imported.push(toEntry(song)); }
       catch (e) { failed.push(`${song.title}: ${e.message}`); }
     }
@@ -280,6 +289,10 @@ function main(files) {
   // Keep hand-curated sample charts only for titles iReal didn't supply.
   const sample = existsSync(SAMPLE) ? JSON.parse(readFileSync(SAMPLE, "utf8")) : [];
   const extras = sample.filter((c) => !seen.has(normalize(c.title)));
+  if (!unique.length) {
+    console.error(only ? `No songs found in playlists matching "${only}".` : "No songs found.");
+    process.exit(1);
+  }
   const library = [...unique, ...extras].sort((a, b) => a.title.localeCompare(b.title));
 
   writeFileSync(OUT, JSON.stringify(library) + "\n");
