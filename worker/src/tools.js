@@ -1,108 +1,126 @@
 /**
- * Jazz Fact Chat — tools.
+ * Jazz Fact Chat — tools. The single source of truth.
  *
- * Two halves per tool:
- *   1. A DEFINITION (name, description, JSON Schema). This is all the model ever
- *      sees. It decides *whether* and *how* to call a tool from these words alone,
- *      so descriptions are written like instructions to a colleague.
- *   2. An IMPLEMENTATION. This runs here in the Worker, never in the model. The
- *      model only asks; our code does the work and hands back the result.
+ * Each tool is defined ONCE, in MCP's native shape:
+ *   name, title, description, inputSchema (JSON Schema), annotations, handler
  *
- * Tool arguments come from the model, so treat them like user input: validate.
+ * - The MCP server (mcp.js) publishes these as-is via tools/list.
+ * - The chat loop (index.js) reaches them THROUGH the MCP client adapter
+ *   (mcp-client.js), which converts them to the OpenAI "function" format the
+ *   LLM providers expect. Same tool, two wire formats.
+ *
+ * The model only ever sees name + description + inputSchema. It decides whether
+ * and how to call a tool from those words alone, so descriptions are written
+ * like instructions to a colleague. Arguments come from the model (or any MCP
+ * client), so handlers validate them like user input.
  */
 
 import FACTS from "./jazz-facts.json" with { type: "json" };
 
 // Wikipedia and MusicBrainz both ask API clients to identify themselves.
-const USER_AGENT = "JazzFactChat/0.2 (+https://github.com/YOUR-GITHUB-USERNAME/jazz-fact-chat)";
+const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/YOUR-GITHUB-USERNAME/jazz-fact-chat)";
 const FETCH_TIMEOUT_MS = 8000;
-const MAX_RESULT_CHARS = 4000; // keep tool results small: they cost tokens on every later round
+const MAX_RESULT_CHARS = 4000; // tool results cost tokens on every later model round
 
-/* ---------- 1. definitions (OpenAI-compatible "tools" format) ---------- */
+/* ---------- definitions ---------- */
 
-export const TOOL_DEFS = [
+export const TOOLS = [
   {
-    type: "function",
-    function: {
-      name: "lookup_musician",
-      description:
-        "Get a short, factual biography of a jazz musician (or band) from Wikipedia. " +
-        "Use this whenever the user asks who someone is, when they were born or died, what instrument they played, " +
-        "or for background on their career. Prefer this over answering from memory.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "The musician's or group's name, e.g. \"Mary Lou Williams\"." },
-        },
-        required: ["name"],
-        additionalProperties: false,
+    name: "lookup_musician",
+    title: "Look up a jazz musician",
+    description:
+      "Get a short, factual biography of a jazz musician (or band) from Wikipedia. " +
+      "Use this whenever the user asks who someone is, when they were born or died, what instrument they played, " +
+      "or for background on their career. Prefer this over answering from memory.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The musician's or group's name, e.g. \"Mary Lou Williams\"." },
       },
+      required: ["name"],
+      additionalProperties: false,
     },
+    // Annotations are hints to MCP clients (not the model): this tool only reads,
+    // and it reaches out to the open internet.
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    handler: lookupMusician,
   },
   {
-    type: "function",
-    function: {
-      name: "album_lineup",
-      description:
-        "Look up an album in MusicBrainz and return its release year and personnel (who played what). " +
-        "ALWAYS use this for any question about who played on a record, its lineup, sidemen, or release year. " +
-        "Never state album personnel from memory. Include the artist when you know it, because many albums share titles.",
-      parameters: {
-        type: "object",
-        properties: {
-          album: { type: "string", description: "Album title, e.g. \"Kind of Blue\"." },
-          artist: { type: "string", description: "Leader or credited artist, e.g. \"Miles Davis\". Optional but strongly recommended." },
-        },
-        required: ["album"],
-        additionalProperties: false,
+    name: "album_lineup",
+    title: "Album personnel and release year",
+    description:
+      "Look up an album in MusicBrainz and return its release year and personnel (who played what). " +
+      "ALWAYS use this for any question about who played on a record, its lineup, sidemen, or release year. " +
+      "Never state album personnel from memory. Include the artist when you know it, because many albums share titles.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        album: { type: "string", description: "Album title, e.g. \"Kind of Blue\"." },
+        artist: { type: "string", description: "Leader or credited artist, e.g. \"Miles Davis\". Optional but strongly recommended." },
       },
+      required: ["album"],
+      additionalProperties: false,
     },
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    handler: albumLineup,
   },
   {
-    type: "function",
-    function: {
-      name: "random_jazz_fact",
-      description:
-        "Return one random, pre-verified jazz fact from a curated list. Use when the user asks for a fun fact, trivia, " +
-        "or something random about jazz. Do not use it to answer specific questions.",
-      parameters: {
-        type: "object",
-        properties: {
-          topic: {
-            type: "string",
-            enum: ["any", "musician", "album", "history", "theory"],
-            description: "Optional category. Defaults to \"any\".",
-          },
+    name: "random_jazz_fact",
+    title: "Random jazz fact",
+    description:
+      "Return one random, pre-verified jazz fact from a curated list. Use when the user asks for a fun fact, trivia, " +
+      "or something random about jazz. Do not use it to answer specific questions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          enum: ["any", "musician", "album", "history", "theory"],
+          description: "Optional category. Defaults to \"any\".",
         },
-        additionalProperties: false,
       },
+      additionalProperties: false,
     },
+    annotations: { readOnlyHint: true, openWorldHint: false }, // local data only
+    handler: randomJazzFact,
   },
 ];
 
-/* ---------- 2. dispatcher ---------- */
+const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 
-const IMPLEMENTATIONS = {
-  lookup_musician: lookupMusician,
-  album_lineup: albumLineup,
-  random_jazz_fact: randomJazzFact,
-};
+export function hasTool(name) {
+  return BY_NAME.has(name);
+}
+
+/** The public definition, without the handler: what tools/list returns. */
+export function publicDefinition({ name, title, description, inputSchema, annotations }) {
+  return { name, title, description, inputSchema, annotations };
+}
 
 /**
- * Run one tool call. Never throws: failures come back as { error } so the model
- * can read what went wrong and tell the user, instead of the whole request dying.
+ * Run one tool. Never throws: returns { result, isError }. A failure comes back
+ * as data so the model can read what went wrong and tell the user.
  */
 export async function runTool(name, args) {
-  const impl = IMPLEMENTATIONS[name];
-  if (!impl) return { error: `Unknown tool "${name}".` };
+  const tool = BY_NAME.get(name);
+  if (!tool) return { result: { error: `Unknown tool "${name}".` }, isError: true };
+  if (args === null || typeof args !== "object" || Array.isArray(args)) {
+    return { result: { error: "Tool arguments must be a JSON object." }, isError: true };
+  }
   try {
-    return await impl(args || {});
+    return { result: await tool.handler(args), isError: false };
   } catch (err) {
-    return { error: `${name} failed: ${err.message}` };
+    return { result: { error: `${name} failed: ${err.message}` }, isError: true };
   }
 }
 
-/* ---------- 3. implementations ---------- */
+/** Serialize a tool result as text, trimmed so one big result can't blow the context. */
+export function serializeResult(result) {
+  const text = JSON.stringify(result);
+  return text.length <= MAX_RESULT_CHARS ? text : text.slice(0, MAX_RESULT_CHARS) + "…(truncated)";
+}
+
+/* ---------- implementations ---------- */
 
 async function lookupMusician({ name }) {
   name = requireString(name, "name", 100);
@@ -123,7 +141,8 @@ async function lookupMusician({ name }) {
   const summary = await getJson(
     "https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(pick.title.replace(/ /g, "_"))
   );
-  if (summary?.type === "disambiguation") {
+  if (!summary) return { found: false, message: `Could not load the Wikipedia summary for "${pick.title}".` };
+  if (summary.type === "disambiguation") {
     return {
       found: false,
       message: `"${pick.title}" is ambiguous on Wikipedia. Ask the user which person they mean.`,
@@ -174,10 +193,12 @@ async function albumLineup({ album, artist }) {
       `https://musicbrainz.org/ws/2/release/${release.id}?fmt=json` +
         "&inc=artist-credits+release-groups+artist-rels+recordings+recording-level-rels"
     );
+    if (!full) continue;
     const parsed = parseRelease(full);
     if (!best || parsed.personnel.length > best.personnel.length) best = parsed;
     if (best.personnel.length >= 3) break; // good enough; don't spend more requests
   }
+  if (!best) return { found: false, message: "MusicBrainz search matched, but the release details could not be loaded." };
 
   return {
     found: true,
@@ -252,9 +273,3 @@ async function getJson(url) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** Serialize a tool result for the model, trimmed so one big result can't blow the context. */
-export function serializeResult(result) {
-  const text = JSON.stringify(result);
-  return text.length <= MAX_RESULT_CHARS ? text : text.slice(0, MAX_RESULT_CHARS) + "…(truncated)";
-}

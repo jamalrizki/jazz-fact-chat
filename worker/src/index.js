@@ -1,6 +1,6 @@
 /**
  * Jazz Fact Chat — Cloudflare Worker
- * Phase 2: proxy + tool-use loop.
+ * Phase 3: proxy + tool-use loop, with tools served over MCP.
  *
  * The tool-use loop, in one picture:
  *
@@ -14,9 +14,14 @@
  * The model never touches the network. It can only *ask* for a tool; the Worker
  * decides whether to run it, runs it, and feeds the result back. That loop
  * repeats until the model answers in plain text (or we hit MAX_TOOL_ROUNDS).
+ *
+ * Since Phase 3, "the Worker runs the tool" means: the chat loop (an MCP host)
+ * asks the MCP server via tools/call. The same server is also public at /mcp,
+ * so any MCP client (Inspector, Claude, an IDE) can use these tools too.
  */
 
-import { TOOL_DEFS, runTool, serializeResult } from "./tools.js";
+import { connect } from "./mcp-client.js";
+import { handleMcpHttp } from "./mcp.js";
 
 const MAX_MESSAGES = 20;
 const MAX_CHARS_PER_MESSAGE = 4000;
@@ -33,7 +38,7 @@ Tools:
 
 Answering:
 - Base factual claims on tool results. If a tool returns nothing useful, say so plainly. Do not fill gaps from memory.
-- Mention the source briefly (e.g. "per MusicBrainz").
+- Mention the source briefly in plain parentheses, e.g. "(per MusicBrainz)". Do not use 【】 brackets, footnote markers, or citation tokens.
 - Be concise: a short paragraph or a short bullet list. Do not use tables.
 - If a question is not about jazz or music, briefly steer back to jazz.`;
 
@@ -47,6 +52,11 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
 
     if (pathname === "/health") return json({ ok: true }, 200, cors);
+
+    // The public MCP endpoint. It does its own Origin check: browsers must be
+    // allowlisted, while desktop/CLI MCP clients send no Origin and are allowed.
+    if (pathname === "/mcp") return handleMcpHttp(request, { allowedOrigins, cors });
+
     if (pathname !== "/api/chat") return json({ error: "Not found" }, 404, cors);
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, cors);
     if (!allowedOrigins.includes(origin)) return json({ error: "Origin not allowed" }, 403, cors);
@@ -76,13 +86,15 @@ export default {
 /* ---------- the tool-use loop ---------- */
 
 async function runConversation(messages, env) {
+  // Discover tools over MCP (initialize → tools/list), exactly like any MCP host.
+  const mcp = await connect();
   const convo = [...messages];
   const trace = []; // what we report back to the browser so you can see the loop happen
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // On the final round, tool_choice "none" forces a text answer.
     const toolChoice = round < MAX_TOOL_ROUNDS ? "auto" : "none";
-    const { message, provider, model } = await chatWithFallback(convo, env, toolChoice);
+    const { message, provider, model } = await chatWithFallback(convo, env, mcp.openAITools, toolChoice);
 
     const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
 
@@ -103,24 +115,23 @@ async function runConversation(messages, env) {
     for (const call of calls) {
       const name = call.function?.name;
       let args = {};
-      let result;
+      let outcome;
       const started = Date.now();
       try {
         args = JSON.parse(call.function?.arguments || "{}");
-        result = await runTool(name, args);
+        outcome = await mcp.callTool(name, args); // → MCP tools/call
       } catch {
-        result = { error: "Tool arguments were not valid JSON." };
+        outcome = { text: JSON.stringify({ error: "Tool arguments were not valid JSON." }), isError: true };
       }
-      const content = serializeResult(result);
-      convo.push({ role: "tool", tool_call_id: call.id, content });
+      convo.push({ role: "tool", tool_call_id: call.id, content: outcome.text });
       trace.push({
         name,
         args,
-        ok: !result?.error,
+        ok: !outcome.isError,
         ms: Date.now() - started,
-        preview: content.slice(0, 600),
+        preview: outcome.text.slice(0, 600),
       });
-      console.log(`tool ${name}(${JSON.stringify(args)}) -> ${result?.error ? "error" : "ok"} in ${Date.now() - started}ms`);
+      console.log(`tool ${name}(${JSON.stringify(args)}) -> ${outcome.isError ? "error" : "ok"} in ${Date.now() - started}ms`);
     }
     // Loop: send the whole conversation, now including the tool results, back to the model.
   }
@@ -185,14 +196,14 @@ function providerList(env) {
 // Fallback happens per model call, so if Groq rate-limits halfway through a tool
 // loop, OpenRouter picks up the same conversation. That works because both
 // providers use the same OpenAI-style messages and tools format.
-async function chatWithFallback(messages, env, toolChoice) {
+async function chatWithFallback(messages, env, tools, toolChoice) {
   const providers = providerList(env);
   if (providers.length === 0) throw new Error("No provider API keys configured");
 
   let lastError;
   for (const p of providers) {
     try {
-      return await callProvider(p, messages, toolChoice);
+      return await callProvider(p, messages, tools, toolChoice);
     } catch (err) {
       lastError = err;
       console.warn(`${p.name} failed: ${err.message}`);
@@ -201,7 +212,7 @@ async function chatWithFallback(messages, env, toolChoice) {
   throw lastError;
 }
 
-async function callProvider(p, messages, toolChoice) {
+async function callProvider(p, messages, tools, toolChoice) {
   const res = await fetch(p.url, {
     method: "POST",
     headers: {
@@ -212,7 +223,7 @@ async function callProvider(p, messages, toolChoice) {
     body: JSON.stringify({
       model: p.model,
       messages,
-      tools: TOOL_DEFS,          // the menu the model can order from
+      tools,                     // the menu the model can order from (from tools/list)
       tool_choice: toolChoice,   // "auto" = model decides; "none" = must answer in text
       temperature: 0.3,
       max_tokens: 2048,
@@ -240,8 +251,8 @@ function parseList(value) {
 
 function corsHeaders(origin, allowedOrigins) {
   const headers = {
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Accept, Mcp-Protocol-Version, Mcp-Session-Id",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
