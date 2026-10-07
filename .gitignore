@@ -3,6 +3,11 @@
 .env
 *.env
 
+# Full chord library (built from iReal Pro exports; deployed with the Worker, never published)
+worker/src/chord-charts.json
+*.ireal.html
+ireal-exports/
+
 # Tooling
 node_modules/
 .wrangler/

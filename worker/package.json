@@ -3,8 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/ensure-charts.mjs",
     "dev": "wrangler dev",
+    "predeploy": "node scripts/ensure-charts.mjs",
     "deploy": "wrangler deploy",
+    "import": "node scripts/import-ireal.mjs",
     "tail": "wrangler tail"
   },
   "devDependencies": {

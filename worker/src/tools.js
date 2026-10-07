@@ -89,10 +89,10 @@ export const TOOLS = [
     name: "chord_chart",
     title: "Chord chart for a jazz standard",
     description:
-      "Return the chord changes for a jazz standard from a curated library, optionally transposed to any key. " +
+      "Return the chord changes for a jazz standard from the chord library, optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
       "Copy the returned chart_text into your reply inside a ```chart code block exactly as given. " +
-      "If the tune isn't in the library, the result lists the tunes that are; never improvise a chart instead.",
+      "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -319,13 +319,31 @@ function normalizeTitle(s) {
     .trim();
 }
 
+const names = (c) => [c.title, ...(c.aliases || [])].map(normalizeTitle);
+
+// Exact title/alias match first, then "starts with", then "contains" (shortest title wins).
 function findChart(tune) {
   const q = normalizeTitle(tune);
-  const names = (c) => [c.title, ...(c.aliases || [])].map(normalizeTitle);
-  return (
-    CHARTS.find((c) => names(c).includes(q)) ||
-    (q.length >= 4 ? CHARTS.find((c) => names(c).some((n) => n.includes(q) || q.includes(n))) : undefined)
-  );
+  if (!q) return undefined;
+  const exact = CHARTS.find((c) => names(c).includes(q));
+  if (exact || q.length < 4) return exact;
+  const byLength = (a, b) => a.title.length - b.title.length;
+  const starts = CHARTS.filter((c) => names(c).some((n) => n.startsWith(q))).sort(byLength);
+  if (starts.length) return starts[0];
+  const contains = CHARTS.filter((c) => names(c).some((n) => n.includes(q) || (n.length >= 6 && q.includes(n)))).sort(byLength);
+  return contains[0];
+}
+
+// Up to 8 titles sharing words with the query, so a miss costs a few tokens, not the whole catalog.
+function suggestCharts(tune) {
+  const words = normalizeTitle(tune).split(" ").filter((w) => w.length >= 3);
+  const scored = CHARTS.map((c) => ({
+    title: c.title,
+    score: words.filter((w) => normalizeTitle(c.title).includes(w)).length,
+  }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.title.length - b.title.length);
+  return scored.slice(0, 8).map((x) => x.title);
 }
 
 async function chordChart({ tune, key }) {
@@ -334,8 +352,8 @@ async function chordChart({ tune, key }) {
   if (!chart) {
     return {
       found: false,
-      message: `"${tune}" isn't in the curated chord-chart library. Tell the user that and suggest tunes from "available". Do not write a chart for it from memory.`,
-      available: CHARTS.map((c) => c.title),
+      message: `"${tune}" isn't in the chord-chart library (${CHARTS.length} tunes). Tell the user that, and mention any close matches in "suggestions". Do not write a chart for it from memory.`,
+      suggestions: suggestCharts(tune),
     };
   }
 
@@ -361,6 +379,7 @@ async function chordChart({ tune, key }) {
   const totalBars = sections.reduce((n, s) => n + s.bars.length, 0);
   const keyLabel = `${keyName} ${chart.mode}`;
   const lines = [`${chart.title} (${chart.composer}) · ${keyLabel} · ${chart.form}`];
+  if (chart.notes?.length) lines.push(`Road map: ${chart.notes.join(", ")}`);
   for (const sec of sections) {
     for (let i = 0; i < sec.bars.length; i += 4) {
       const label = (i === 0 ? sec.label : "").padEnd(2, " ");
@@ -370,7 +389,7 @@ async function chordChart({ tune, key }) {
 
   return {
     found: true,
-    source: "curated chord library",
+    source: chart.source || "curated chord library",
     title: chart.title,
     composer: chart.composer,
     key: keyLabel,
