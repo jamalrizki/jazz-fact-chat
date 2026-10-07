@@ -111,7 +111,7 @@ export const TOOLS = [
     description:
       "Return the chord changes for a jazz standard from the chord library, optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
-      "Copy the returned chart_text into your reply inside a ```chart code block exactly as given. " +
+      "The result includes chart_text (plain text) and layout (the chart as written, iReal-style). " +
       "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead.",
     inputSchema: {
       type: "object",
@@ -448,6 +448,7 @@ function transposeChord(chord, semis, names) {
 function normalizeTitle(s) {
   return String(s)
     .toLowerCase()
+    .replace(/['’]/g, "") // "bernies tune" should find "Bernie's Tune"
     .replace(/[^a-z0-9 ]/g, " ")
     .replace(/\bthe\b/g, " ")
     .replace(/\s+/g, " ")
@@ -504,12 +505,14 @@ async function chordChart({ tune, key }) {
   const names = useSharps ? SHARP_NAMES : FLAT_NAMES;
   const keyName = semis === 0 ? chart.key : names[target.pc];
 
+  const tx = (c) => (semis === 0 ? c : transposeChord(c, semis, names));
   const sections = chart.sections.map((sec) => ({
     label: sec.label,
-    bars: sec.bars.map((bar) =>
-      semis === 0 ? bar : bar.split(" ").map((c) => transposeChord(c, semis, names)).join(" ")
-    ),
+    bars: sec.bars.map((bar) => bar.split(" ").map(tx).join(" ")),
   }));
+  // The chart as written (repeats, endings, codas in place). Hand-curated charts
+  // don't have one, so build a simple version from their sections.
+  const written = (chart.written || writtenFromSections(chart.sections)).map((b) => (b.c ? { ...b, c: b.c.map(tx) } : { ...b }));
 
   const totalBars = sections.reduce((n, s) => n + s.bars.length, 0);
   const keyLabel = `${keyName} ${chart.mode}`;
@@ -531,8 +534,26 @@ async function chordChart({ tune, key }) {
     form: chart.form,
     bars: totalBars,
     chart_text: lines.join("\n"),
+    layout: { style: chart.style || null, bars: written },
     note: "Common changes as typically played. Published versions and players' reharmonizations vary.",
   };
+}
+
+function writtenFromSections(sections) {
+  const out = [];
+  sections.forEach((sec, si) => {
+    sec.bars.forEach((bar, bi) => {
+      const b = { c: bar.split(" ") };
+      if (bi === 0) {
+        if (sec.label) b.l = sec.label;
+        if (si > 0) b.o = "[";
+      }
+      if (bi === sec.bars.length - 1) b.e = si === sections.length - 1 ? "Z" : "]";
+      out.push(b);
+    });
+  });
+  if (out.length) out[0].t = "4/4";
+  return out;
 }
 
 /* ---------- helpers ---------- */

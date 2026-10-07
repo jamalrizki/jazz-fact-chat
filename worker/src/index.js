@@ -60,7 +60,7 @@ Other tools:
 - random_jazz_fact: only when the user asks for a fun fact or trivia.
 
 Chord charts:
-- Put chord_chart's chart_text in your reply inside a \`\`\`chart code block, copied exactly. Add at most two short sentences after it (e.g. the form, or one practice tip).
+- When chord_chart finds the tune, the app shows the full chart to the user automatically, right under your reply. Do NOT write out the chords yourself. Just add one or two short sentences (e.g. the key and form, or a practice tip).
 - If chord_chart doesn't have the tune, say so in one sentence and mention any close matches from its "suggestions". Do NOT write chords for that tune from memory, not even a partial or "typical" version.
 - Never transpose a chart yourself; ask chord_chart for the key instead. Never write out melodies or lyrics.
 
@@ -118,6 +118,7 @@ async function runConversation(messages, env) {
   const convo = [...messages];
   const trace = []; // what we report back to the browser so you can see the loop happen
   let searches = 0;
+  const charts = []; // chord charts go straight to the page, not through the model
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // On the final round, tool_choice "none" forces a text answer, and we say so explicitly:
@@ -153,7 +154,7 @@ async function runConversation(messages, env) {
         }
       }
       if (!reply) throw new Error("Empty reply from model");
-      return { reply, provider, model, tools: trace };
+      return { reply, provider, model, tools: trace, charts };
     }
 
     // The model asked for tools. First, record its request in the conversation:
@@ -182,13 +183,24 @@ async function runConversation(messages, env) {
       } catch {
         outcome = { text: JSON.stringify({ error: "Tool arguments were not valid JSON." }), isError: true };
       }
-      convo.push({ role: "tool", tool_call_id: call.id, content: outcome.text });
+      // A found chord chart is handed to the page directly; the model only gets a
+      // summary. It can't garble the chart, and it saves tokens on every later round.
+      let toModel = outcome.text;
+      const sc = outcome.structured;
+      if (name === "chord_chart" && sc?.found && sc.layout) {
+        charts.push({ title: sc.title, composer: sc.composer, key: sc.key, form: sc.form, style: sc.layout.style, bars: sc.layout.bars });
+        toModel = JSON.stringify({
+          found: true, title: sc.title, composer: sc.composer, key: sc.key, form: sc.form, bars: sc.bars,
+          note: "The full chart is displayed to the user automatically. Do not write out the chords.",
+        });
+      }
+      convo.push({ role: "tool", tool_call_id: call.id, content: toModel });
       trace.push({
         name,
         args,
         ok: !outcome.isError,
         ms: Date.now() - started,
-        preview: outcome.text.slice(0, 600),
+        preview: toModel.slice(0, 600),
       });
       console.log(`tool ${name}(${JSON.stringify(args)}) -> ${outcome.isError ? "error" : "ok"} in ${Date.now() - started}ms`);
     }

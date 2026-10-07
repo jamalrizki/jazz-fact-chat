@@ -52,7 +52,7 @@ export async function connect(env = {}) {
           .filter((c) => c.type === "text")
           .map((c) => c.text)
           .join("\n");
-        return { text, isError: Boolean(result.isError) };
+        return { text, isError: Boolean(result.isError), structured: result.structuredContent };
       } catch (err) {
         // Protocol-level error (e.g. the model invented a tool name). Report it to the model as data.
         return { text: JSON.stringify({ error: err.message }), isError: true };

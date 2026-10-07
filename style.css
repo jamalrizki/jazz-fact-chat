@@ -340,3 +340,90 @@ pre.code {
 }
 
 .docs-footer { border-top: 1px solid var(--border); padding: 12px 0 24px; color: var(--muted); font-size: 0.85rem; }
+
+/* ---------- iReal-style chord chart ---------- */
+
+.ireal {
+  align-self: stretch;
+  margin-top: -4px;
+  padding: 14px 14px 16px;
+  background: #0b0b0e;
+  border: 1px solid rgba(var(--neon-rgb), 0.45);
+  border-radius: 12px;
+  box-shadow: inset 0 0 30px -16px rgba(var(--neon-rgb), 0.7);
+  overflow-x: auto;
+  --bar-line: #d9d9e0;
+  --chord: #ffffff;
+}
+.ireal-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 8px; }
+.ireal-title { font: 700 1.1rem/1.2 "Roboto Condensed", var(--font-body); color: #fff; text-align: center; }
+.ireal-style, .ireal-composer { font: 500 0.78rem/1.2 "Roboto Condensed", var(--font-body); color: var(--muted); }
+.ireal-composer { text-align: right; }
+.ireal-sub { text-align: center; color: var(--muted); font-size: 0.72rem; margin: 2px 0 10px; }
+
+.ireal-grid { min-width: 340px; }
+.ireal-row { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 10px; }
+.ireal-row.has-label { margin-top: 22px; }
+
+.bar {
+  position: relative;
+  min-height: 52px;
+  border-left: 1.5px solid var(--bar-line);
+  padding: 6px 4px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.bar.empty { border-left: 0; }
+.bar.row-end { border-right: 1.5px solid var(--bar-line); }
+.bar.after-close { border-left-color: transparent; }
+.bar.open-double { border-left: 4px double var(--bar-line); }
+.bar.open-repeat { border-left: 4px solid var(--bar-line); box-shadow: inset 3px 0 0 -1.5px #0b0b0e, inset 4.5px 0 0 -1.5px var(--bar-line); }
+.bar.open-repeat::before, .bar.close-repeat::after {
+  content: ""; position: absolute; top: 50%; width: 4px; height: 14px; transform: translateY(-50%);
+  background: radial-gradient(circle, var(--bar-line) 1.6px, transparent 2px) 0 0 / 4px 7px repeat-y;
+}
+.bar.open-repeat::before { left: 5px; }
+.bar.close-repeat::after { right: 5px; }
+.bar.close-double { border-right: 4px double var(--bar-line); }
+.bar.close-repeat { border-right: 4px solid var(--bar-line); padding-right: 12px; }
+.bar.close-final { border-right: 5px solid var(--bar-line); box-shadow: inset -7px 0 0 -5.5px var(--bar-line); }
+
+.lbl {
+  position: absolute; top: -19px; left: -2px;
+  min-width: 16px; padding: 0 3px; text-align: center;
+  font: 700 0.75rem/16px "Roboto Condensed", var(--font-body);
+  background: var(--neon); color: var(--on-neon); border-radius: 2px;
+}
+.tsig {
+  position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  font: 700 0.8rem/0.9 "Roboto Condensed", var(--font-body); color: var(--chord);
+}
+.bar:has(.tsig) .chords { padding-left: 12px; }
+.bar.open-repeat .tsig { left: 13px; }
+.bar.open-repeat:has(.tsig) .chords { padding-left: 20px; }
+.ending { border-top: 1.5px solid var(--bar-line); margin-top: 4px; }
+.ending-start { box-shadow: inset 0 0 0 0 transparent; }
+.ending-start::after {
+  content: ""; position: absolute; left: -1.5px; top: -1.5px; width: 1.5px; height: 12px; background: var(--bar-line);
+}
+.ending-num { position: absolute; top: 1px; left: 4px; font: 700 0.68rem/1 "Roboto Condensed", var(--font-body); color: var(--chord); }
+.sym { position: absolute; top: -2px; right: 4px; font-family: "Apple Symbols", "Noto Music", "Segoe UI Symbol", serif; font-size: 1rem; color: var(--chord); }
+.cmt { font: italic 500 0.66rem/1.1 "Roboto Condensed", var(--font-body); color: var(--muted); margin-top: 2px; }
+
+.chords { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.ch { white-space: nowrap; color: var(--chord); font-family: "Roboto Condensed", var(--font-body); line-height: 1; }
+.ch .rt { font-weight: 700; font-size: 1.45rem; }
+.ch .rt.nc { font-size: 0.95rem; }
+.ch .ac { font-weight: 700; font-size: 0.85rem; vertical-align: 0.6em; margin-left: 1px; }
+.ch .ql { font-weight: 700; font-size: 0.8rem; margin-left: 1px; }
+.ch .bs { display: block; font-weight: 700; font-size: 0.75rem; margin-left: 6px; color: #cfcfd6; }
+.rpt { font: 700 1.5rem/1 "Roboto Condensed", var(--font-body); color: var(--chord); margin-left: 30%; }
+.rpt sup { font-size: 0.6rem; }
+
+@media (max-width: 480px) {
+  .ch .rt { font-size: 1.15rem; }
+  .ch .ql { font-size: 0.7rem; }
+  .bar { min-height: 44px; padding-left: 6px; }
+}

@@ -52,7 +52,115 @@ function renderToolTrace(tools) {
   chatEl.appendChild(details);
 }
 
-/* ---------- chord charts ---------- */
+/* ---------- iReal-style chord charts ----------
+ * The Worker sends charts as data ({ title, composer, key, form, style, bars }),
+ * written the way iReal Pro writes them: repeats, endings, % bars and codas in place.
+ * Everything here is built with DOM methods + textContent: no model text becomes HTML.
+ */
+
+const h = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+};
+
+// iReal chord symbols: maj7 → Δ7, m7 → –7, m7b5 → ø7, dim7 → o7, aug → +
+function irealQuality(q) {
+  const map = [
+    [/^mMaj/, "–Δ"], [/^maj/, "Δ"], [/^m7b5$/, "ø7"], [/^m9b5$/, "ø9"],
+    [/^dim7$/, "o7"], [/^dim$/, "o"], [/^aug$/, "+"], [/^m/, "–"],
+  ];
+  for (const [re, sub] of map) if (re.test(q)) { q = q.replace(re, sub); break; }
+  return q.replace("6/9", "69").replace(/b(\d)/g, "♭$1").replace(/#(\d)/g, "♯$1");
+}
+
+function irealChord(sym) {
+  const span = h("span", "ch");
+  const m = sym.match(/^([A-G])([b#]?)(.*?)(?:\/([A-G])([b#]?))?$/);
+  if (!m) { span.append(h("span", "rt nc", sym)); return span; }
+  const [, root, acc, q, bass, bassAcc] = m;
+  span.append(h("span", "rt", root));
+  if (acc) span.append(h("span", "ac", acc === "b" ? "♭" : "♯"));
+  if (q) span.append(h("span", "ql", irealQuality(q)));
+  if (bass) span.append(h("span", "bs", "/" + bass + (bassAcc === "b" ? "♭" : bassAcc === "#" ? "♯" : "")));
+  return span;
+}
+
+function renderIrealChart(chart) {
+  const wrap = h("div", "ireal");
+  const head = h("div", "ireal-head");
+  head.append(
+    h("div", "ireal-style", chart.style ? `(${chart.style})` : ""),
+    h("div", "ireal-title", chart.title),
+    h("div", "ireal-composer", chart.composer && chart.composer !== "unknown" ? chart.composer : "")
+  );
+  wrap.append(head, h("div", "ireal-sub", [chart.key, chart.form].filter(Boolean).join(" · ")));
+
+  // Lay bars out 4 per row like iReal: a section letter starts a new row, and a
+  // 2nd ending starts a new row indented under the 1st ending.
+  const rows = [];
+  let row = [];
+  let ending1Col = 0;
+  let inEnding = 0;
+  for (const bar of chart.bars) {
+    if (row.length && (row.length === 4 || bar.l || (bar.n || 0) >= 2)) { rows.push(row); row = []; }
+    if (bar.n === 1) ending1Col = row.length;
+    if ((bar.n || 0) >= 2 && row.length === 0) for (let i = 0; i < ending1Col; i++) row.push(null);
+    if (bar.n) inEnding = bar.n;
+    row.push({ ...bar, inEnding, endingStart: Boolean(bar.n) });
+    if (["}", "]", "Z"].includes(bar.e)) inEnding = 0;
+  }
+  if (row.length) rows.push(row);
+
+  const grid = h("div", "ireal-grid");
+  for (const r of rows) {
+    const rowEl = h("div", "ireal-row");
+    if (r.some((b) => b && b.l)) rowEl.classList.add("has-label");
+    for (let i = 0; i < 4; i++) {
+      const b = r[i];
+      if (!b) { rowEl.append(h("div", "bar empty")); continue; }
+      const cell = h("div", "bar");
+      if (b.o === "[") cell.classList.add("open-double");
+      if (b.o === "{") cell.classList.add("open-repeat");
+      if (b.e === "]") cell.classList.add("close-double");
+      if (b.e === "}") cell.classList.add("close-repeat");
+      if (b.e === "Z") cell.classList.add("close-final");
+      const prev = r[i - 1];
+      if (prev && ["]", "}", "Z"].includes(prev.e)) cell.classList.add("after-close");
+      if (i === 3 || !r[i + 1]) cell.classList.add("row-end");
+      if (b.inEnding) {
+        cell.classList.add("ending");
+        if (b.endingStart) { cell.classList.add("ending-start"); cell.append(h("span", "ending-num", `${b.n}.`)); }
+      }
+      if (b.l) cell.append(h("span", "lbl", b.l));
+      if (b.t) {
+        const t = h("span", "tsig");
+        const [top, bottom] = b.t.split("/");
+        t.append(h("span", null, top), h("span", null, bottom));
+        cell.append(t);
+      }
+      const marks = [b.s && "𝄋", b.q && "𝄌", b.f && "𝄐"].filter(Boolean).join(" ");
+      if (marks) cell.append(h("span", "sym", marks));
+      const body = h("div", "chords");
+      if (b.r) {
+        const rp = h("span", "rpt", "%");
+        if (b.r === "%2") rp.append(h("sup", null, "2"));
+        body.append(rp);
+      } else {
+        for (const c of b.c || []) body.append(irealChord(c));
+      }
+      cell.append(body);
+      if (b.m) cell.append(h("span", "cmt", b.m));
+      rowEl.append(cell);
+    }
+    grid.append(rowEl);
+  }
+  wrap.append(grid);
+  return wrap;
+}
+
+/* ---------- plain-text chord charts (fallback for ```chart blocks) ---------- */
 
 // Pretty accidentals for display only: Bb7b9 → B♭7♭9, F#m7 → F♯m7.
 function prettyChord(c) {
@@ -244,6 +352,7 @@ async function send(text) {
 
     pending.className = "msg assistant md";
     pending.innerHTML = renderMarkdown(data.reply); // safe: renderMarkdown escapes first
+    for (const chart of data.charts || []) chatEl.appendChild(renderIrealChart(chart));
     if (data.tools?.length) renderToolTrace(data.tools);
     history.push({ role: "assistant", content: data.reply });
 

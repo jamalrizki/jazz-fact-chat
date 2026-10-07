@@ -223,6 +223,98 @@ export function parseMusic(music) {
   return { sections, notes: [...notes], time };
 }
 
+/* ---------- 3b. music string → the chart AS WRITTEN (iReal layout) ----------
+ * One entry per written bar, in reading order, with compact keys:
+ *   c: chords            o/e: opening/closing barline ("|", "[", "]", "{", "}", "Z")
+ *   l: section letter    n: ending number      t: time signature
+ *   r: repeat sign ("%" = repeat previous bar, "%2" = repeat previous two bars)
+ *   s: segno  q: coda  f: fermata (booleans)   m: comment text (e.g. "D.C. al Coda")
+ */
+export function parseWritten(music) {
+  const bars = [];
+  let cur = null;
+  let nextOpen = "|";
+  const pending = {};
+  let lastChord = null;
+
+  const start = () => {
+    if (!cur) {
+      cur = { c: [], o: nextOpen, e: "|", ...pending };
+      for (const k of Object.keys(pending)) delete pending[k];
+      nextOpen = "|";
+    }
+    return cur;
+  };
+  const close = (e) => {
+    if (cur) {
+      cur.e = e;
+      if (cur.c.length || cur.r) bars.push(cur);
+      else if (cur.l || cur.n || cur.t) Object.assign(pending, { l: cur.l, n: cur.n, t: cur.t, o: undefined });
+      cur = null;
+    }
+    if (e === "]" || e === "}" || e === "Z") nextOpen = "|";
+  };
+  const mark = (key, value) => { if (cur && (cur.c.length || cur.r)) cur[key] = value; else pending[key] = value; };
+
+  let i = 0;
+  const s = music;
+  while (i < s.length) {
+    const rest = s.slice(i);
+    let m;
+    if (rest.startsWith("XyQ")) { i += 3; continue; }
+    if ((m = rest.match(/^\*(\w)/))) { const l = m[1]; pending.l = l === "i" ? "In" : l; i += 2; continue; }
+    if ((m = rest.match(/^<([^>]*)>/))) {
+      const text = m[1].replace(/^\*\d+\s*/, "").trim();
+      if (text) mark("m", text);
+      i += m[0].length; continue;
+    }
+    if ((m = rest.match(/^T(\d)(\d)/))) { pending.t = `${m[1]}/${m[2]}`; i += 3; continue; }
+    if ((m = rest.match(/^\(([^)]*)\)/))) { i += m[0].length; continue; }
+    if (rest.startsWith("Kcl")) { close("|"); start().r = "%"; i += 3; continue; }
+    if (rest.startsWith("r|XyQ")) { close("|"); start().r = "%2"; close("|"); start().r = "%2"; i += 5; continue; }
+    if (rest[0] === "x") { start().r = "%"; i += 1; continue; }
+    if ((m = rest.match(/^N(\d)/))) { close("|"); pending.n = Number(m[1]); i += 2; continue; }
+    if (rest[0] === "{") { close(cur ? "|" : (cur?.e ?? "|")); nextOpen = "{"; i += 1; continue; }
+    if (rest[0] === "[") { close("|"); nextOpen = "["; i += 1; continue; }
+    if (rest[0] === "}") { close("}"); i += 1; continue; }
+    if (rest[0] === "]") { close("]"); i += 1; continue; }
+    if (rest[0] === "Z") { close("Z"); i += 1; continue; }
+    if (rest.startsWith("LZ") || rest[0] === "|") { close("|"); i += rest.startsWith("LZ") ? 2 : 1; continue; }
+    if (rest[0] === "n") { start().c.push("N.C."); i += 1; continue; }
+    if (rest[0] === "S") { mark("s", true); i += 1; continue; }
+    if (rest[0] === "Q") { mark("q", true); i += 1; continue; }
+    if (rest[0] === "f") { mark("f", true); i += 1; continue; }
+    if ((m = rest.match(/^([A-GW])([b#]?)/))) {
+      let j = m[0].length;
+      const q = QUALITIES.find((qq) => rest.slice(j).startsWith(qq)) ?? "";
+      j += q.length;
+      let bass = "";
+      const bm = rest.slice(j).match(/^\/([A-G][b#]?)/);
+      if (bm) { bass = "/" + bm[1]; j += bm[0].length; }
+      let root = m[1] + m[2];
+      if (m[1] === "W") root = lastChord ? lastChord.root : "";
+      if (root) {
+        const quality = m[1] === "W" ? lastChord.quality : convertQuality(q);
+        start().c.push(root + quality + bass);
+        lastChord = { root, quality };
+      }
+      i += j; continue;
+    }
+    i += 1;
+  }
+  close("Z");
+  // The last written bar always ends the tune.
+  if (bars.length && bars[bars.length - 1].e === "|") bars[bars.length - 1].e = "Z";
+  // Drop default/empty fields to keep the library small.
+  for (const b of bars) {
+    if (b.o === "|") delete b.o;
+    if (b.e === "|") delete b.e;
+    if (!b.c.length) delete b.c;
+    for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
+  }
+  return bars;
+}
+
 /* ---------- 4. song → library entry ---------- */
 
 const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -258,6 +350,8 @@ export function toEntry(song) {
     mode: minor ? "minor" : "major",
     form,
     sections,
+    written: parseWritten(song.music),
+    style: song.style || undefined,
     source: "iReal Pro",
   };
   if (notes.length) entry.notes = notes;
