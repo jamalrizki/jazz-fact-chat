@@ -12,3 +12,7 @@ ireal-exports/
 node_modules/
 .wrangler/
 .DS_Store
+
+# Study material: copyrighted books and iReal exports (private, never published)
+Jazz books/
+knowledge/

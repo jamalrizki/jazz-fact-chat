@@ -107,9 +107,9 @@ export const TOOLS = [
   },
   {
     name: "chord_chart",
-    title: "Chord chart for a jazz standard",
+    title: "Chord chart for a tune",
     description:
-      "Return the chord changes for a jazz standard from the chord library, optionally transposed to any key. " +
+      "Return the chord changes for a tune from the chord library (jazz standards, plus Brazilian, Latin, blues, country and pop songs), optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
       "The result includes chart_text (plain text) and layout (the chart as written, iReal-style). " +
       "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead.",
@@ -457,6 +457,17 @@ function normalizeTitle(s) {
 
 const names = (c) => [c.title, ...(c.aliases || [])].map(normalizeTitle);
 
+// Words that may wrap a title in a request ("autumn leaves chords in bb") without changing which tune is meant.
+const REQUEST_FILLER = new Set(["in", "key", "of", "chord", "chords", "changes", "chart", "for", "lead", "sheet", "to", "major", "minor", "flat", "sharp"]);
+
+// True when the request is the title n plus only filler words and/or a key name. This stops
+// "stairway to heaven" from matching a different, shorter tune ("Heaven") that it merely contains.
+function titlePlusFiller(q, n) {
+  const padded = ` ${q} `;
+  if (!padded.includes(` ${n} `)) return false;
+  return padded.replace(` ${n} `, " ").split(" ").filter(Boolean).every((w) => REQUEST_FILLER.has(w) || /^[a-g]b?$/.test(w));
+}
+
 // Exact title/alias match first, then "starts with", then "contains" (shortest title wins).
 function findChart(tune) {
   const q = normalizeTitle(tune);
@@ -466,7 +477,7 @@ function findChart(tune) {
   const byLength = (a, b) => a.title.length - b.title.length;
   const starts = CHARTS.filter((c) => names(c).some((n) => n.startsWith(q))).sort(byLength);
   if (starts.length) return starts[0];
-  const contains = CHARTS.filter((c) => names(c).some((n) => n.includes(q) || (n.length >= 6 && q.includes(n)))).sort(byLength);
+  const contains = CHARTS.filter((c) => names(c).some((n) => n.includes(q) || (n.length >= 4 && titlePlusFiller(q, n)))).sort(byLength);
   return contains[0];
 }
 

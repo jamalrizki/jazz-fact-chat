@@ -4,6 +4,8 @@
  *
  *   npm run import -- ../../my-playlist.html [more files...]
  *   npm run import -- --only jazz ../../main-playlists.html   (only playlists whose name contains "jazz")
+ *   npm run import -- --merge ../../more-charts.html          (add to the existing library instead of replacing it;
+ *                                                                on a title/alias collision the existing chart wins)
  *
  * Reads iReal Pro "irealb://" exports (the HTML file or a text file holding the
  * link), converts every song to the app's chart format, and writes
@@ -366,13 +368,15 @@ function normalize(t) {
 
 function main(args) {
   let only = null;
+  let merge = false;
   const files = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--only") only = args[++i];
+    else if (args[i] === "--merge") merge = true;
     else files.push(args[i]);
   }
   if (!files.length) {
-    console.error("Usage: npm run import -- [--only <playlist name>] <ireal-export.html> [more files...]");
+    console.error("Usage: npm run import -- [--only <playlist name>] [--merge] <ireal-export.html> [more files...]");
     process.exit(1);
   }
   const imported = [];
@@ -383,8 +387,10 @@ function main(args) {
       catch (e) { failed.push(`${song.title}: ${e.message}`); }
     }
   }
-  // De-duplicate by title (first one wins).
-  const seen = new Set();
+  // --merge: start from the existing library so its charts (already validated) win on any collision.
+  const base = merge && existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : [];
+  // De-duplicate by title or alias (first one wins).
+  const seen = new Set(base.flatMap((e) => [e.title, ...(e.aliases || [])]).map(normalize));
   const unique = imported.filter((e) => !seen.has(normalize(e.title)) && seen.add(normalize(e.title)));
 
   // Keep hand-curated sample charts only for titles iReal didn't supply.
@@ -394,11 +400,12 @@ function main(args) {
     console.error(only ? `No songs found in playlists matching "${only}".` : "No songs found.");
     process.exit(1);
   }
-  const library = [...unique, ...extras].sort((a, b) => a.title.localeCompare(b.title));
+  const library = [...base, ...unique, ...extras].sort((a, b) => a.title.localeCompare(b.title));
 
   writeFileSync(OUT, JSON.stringify(library) + "\n");
   const kb = (Buffer.byteLength(JSON.stringify(library)) / 1024).toFixed(0);
   console.log(`Imported ${unique.length} charts (+${extras.length} curated extras) → src/chord-charts.json (${kb} KB)`);
+  if (merge) console.log(`Merged into ${base.length} existing charts; ${imported.length - unique.length} collided and kept the existing chart. Library now has ${library.length}.`);
   if (failed.length) console.log(`Skipped ${failed.length}:\n  ` + failed.slice(0, 20).join("\n  "));
 }
 
