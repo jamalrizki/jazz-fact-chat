@@ -16,3 +16,4 @@ node_modules/
 # Study material: copyrighted books and iReal exports (private, never published)
 Jazz books/
 knowledge/
+__pycache__/

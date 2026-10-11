@@ -17,6 +17,7 @@
 
 import FACTS from "./jazz-facts.json" with { type: "json" };
 import CHARTS from "./chord-charts.json" with { type: "json" };
+import { searchBooks } from "./books.js";
 
 // Wikipedia and MusicBrainz both ask API clients to identify themselves.
 const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/jamalrizki/jazz-fact-chat)";
@@ -128,12 +129,49 @@ export const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: chordChart,
   },
+  {
+    name: "search_theory_books",
+    title: "Search the jazz-theory books",
+    description:
+      "Search a library of eleven jazz reference books (harmony, chord-scale theory, improvisation, voicings, arranging, " +
+      "jazz history, and how players learn and practice) and return the most relevant passages. " +
+      "Use it first for conceptual and how-to questions about jazz theory, harmony, improvisation technique, voicings, " +
+      "arranging, practice, and jazz history or style, e.g. \"what is a tritone substitution\" or \"how do I voice a rootless chord\". " +
+      "Write the query as a descriptive phrase or full question, using the standard jazz terms a textbook would use; it matches by meaning, not exact words. " +
+      "Do NOT use it for facts about a specific person, album or session (use lookup_musician, album_lineup or search_jazz) " +
+      "or for chord charts. The passages are background for you: explain them in your own words, never copy phrasing, " +
+      "and do not name or cite the books. If nothing relevant comes back, say so.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The theory question in plain words, e.g. \"how do I use tritone substitution on a ii-V-I\"." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false }, // our own index only
+    // The passages are copyrighted book text. Only the chat loop (an in-process MCP host) may call this;
+    // the public /mcp endpoint neither lists nor runs it. See mcp.js.
+    internalOnly: true,
+    maxResultChars: 8000, // three passages of up to ~2,200 characters, plus JSON overhead
+    handler: searchTheoryBooks,
+  },
 ];
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 
 export function hasTool(name) {
   return BY_NAME.has(name);
+}
+
+/** Tools the public /mcp endpoint must not list or run (only the in-process chat host may). */
+export function isInternalOnly(name) {
+  return BY_NAME.get(name)?.internalOnly === true;
+}
+
+/** Per-tool cap on the serialized result (most tools use the default). */
+export function resultLimit(name) {
+  return BY_NAME.get(name)?.maxResultChars ?? MAX_RESULT_CHARS;
 }
 
 /** The public definition, without the handler: what tools/list returns. */
@@ -159,12 +197,17 @@ export async function runTool(name, args, env = {}) {
 }
 
 /** Serialize a tool result as text, trimmed so one big result can't blow the context. */
-export function serializeResult(result) {
+export function serializeResult(result, limit = MAX_RESULT_CHARS) {
   const text = JSON.stringify(result);
-  return text.length <= MAX_RESULT_CHARS ? text : text.slice(0, MAX_RESULT_CHARS) + "…(truncated)";
+  return text.length <= limit ? text : text.slice(0, limit) + "…(truncated)";
 }
 
 /* ---------- implementations ---------- */
+
+async function searchTheoryBooks({ query }, env = {}) {
+  query = requireString(query, "query", 300);
+  return searchBooks(query, env);
+}
 
 async function lookupMusician({ name }) {
   name = requireString(name, "name", 100);

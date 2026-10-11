@@ -20,7 +20,7 @@
  *   handleMcpHttp(request) the HTTP transport around it
  */
 
-import { TOOLS, hasTool, publicDefinition, runTool, serializeResult } from "./tools.js";
+import { TOOLS, hasTool, isInternalOnly, publicDefinition, resultLimit, runTool, serializeResult } from "./tools.js";
 
 // Newest first. If the client asks for one we know, we echo it back;
 // otherwise we offer our newest and the client decides whether to continue.
@@ -43,8 +43,13 @@ const INVALID_PARAMS = -32602;
 /**
  * Handle one JSON-RPC message. Returns a response object, or null for a
  * notification (notifications never get a reply).
+ *
+ * `internal` is true only for our own chat loop calling in-process (mcp-client.js).
+ * Anything arriving over HTTP is public: it defaults to false, so a caller that
+ * forgets to say otherwise gets the safe behaviour. Internal-only tools are
+ * invisible and uncallable to public clients.
  */
-export async function handleRpc(msg, env = {}) {
+export async function handleRpc(msg, env = {}, { internal = false } = {}) {
   if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") {
     return rpcError(msg?.id ?? null, INVALID_REQUEST, "Invalid Request");
   }
@@ -77,20 +82,21 @@ export async function handleRpc(msg, env = {}) {
 
     // 2. Discovery: the definitions only. Handlers never leave the server.
     case "tools/list":
-      return rpcResult(id, { tools: TOOLS.map(publicDefinition) });
+      return rpcResult(id, { tools: TOOLS.filter((t) => internal || !t.internalOnly).map(publicDefinition) });
 
     // 3. Invocation
     case "tools/call": {
       const { name, arguments: args = {} } = params;
       // Asking for a tool that doesn't exist is a *protocol* error...
-      if (typeof name !== "string" || !hasTool(name)) {
+      // (Internal-only tools look exactly like unknown ones to public callers.)
+      if (typeof name !== "string" || !hasTool(name) || (!internal && isInternalOnly(name))) {
         return rpcError(id, INVALID_PARAMS, `Unknown tool: ${name}`);
       }
       // ...but a tool that runs and fails is a normal *result* with isError: true,
       // so the model gets to see the failure and react to it.
       const { result, isError } = await runTool(name, args, env); // env carries secrets like TAVILY_API_KEY
       return rpcResult(id, {
-        content: [{ type: "text", text: serializeResult(result) }], // for any client/LLM
+        content: [{ type: "text", text: serializeResult(result, resultLimit(name)) }], // for any client/LLM
         structuredContent: result, // machine-readable copy for clients that support it
         isError,
       });

@@ -19,11 +19,14 @@
 
 import { handleRpc, SUPPORTED_PROTOCOL_VERSIONS } from "./mcp.js";
 
+// This host runs inside the Worker, so it is the one caller allowed to use internal-only tools.
+const INTERNAL = { internal: true };
+
 let nextId = 1;
 
 export async function connect(env = {}) {
   const send = async (method, params) => {
-    const reply = await handleRpc({ jsonrpc: "2.0", id: nextId++, method, params }, env);
+    const reply = await handleRpc({ jsonrpc: "2.0", id: nextId++, method, params }, env, INTERNAL);
     if (reply.error) throw new Error(`MCP ${method} failed: ${reply.error.message}`);
     return reply.result;
   };
@@ -34,7 +37,7 @@ export async function connect(env = {}) {
     capabilities: {},
     clientInfo: { name: "jazz-fact-chat-host", version: "0.3.0" },
   });
-  await handleRpc({ jsonrpc: "2.0", method: "notifications/initialized" }, env);
+  await handleRpc({ jsonrpc: "2.0", method: "notifications/initialized" }, env, INTERNAL);
   const { tools } = await send("tools/list", {});
   return {
     serverInfo: init.serverInfo,

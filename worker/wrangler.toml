@@ -11,3 +11,16 @@ GROQ_MODEL = "openai/gpt-oss-120b"
 OPENROUTER_MODEL = "openrouter/free"
 # Comma-separated origins (scheme + host only, no path). GitHub Pages serves this app from jamalrizki.github.io.
 ALLOWED_ORIGINS = "http://localhost:8000,http://127.0.0.1:8000,https://jamalrizki.github.io"
+
+# Theory-book search (RAG). Both are free-tier services.
+# AI = Workers AI, used to turn each question into a vector (same model that embedded the books).
+[ai]
+binding = "AI"
+
+# BOOKS = the Vectorize index holding the embedded book chunks. Create it once with:
+#   npx wrangler vectorize create jazz-books --dimensions=384 --metric=cosine
+# remote = true: `wrangler dev` has no local Vectorize, so dev queries the real index.
+[[vectorize]]
+binding = "BOOKS"
+index_name = "jazz-books"
+remote = true

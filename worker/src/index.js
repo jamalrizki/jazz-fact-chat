@@ -22,12 +22,14 @@
 
 import { connect } from "./mcp-client.js";
 import { handleMcpHttp } from "./mcp.js";
+import { parseRetryWaitSeconds } from "./retry-wait.js";
 
 const MAX_MESSAGES = 20;
 const MAX_CHARS_PER_MESSAGE = 4000;
 const UPSTREAM_TIMEOUT_MS = 25000;
 const MAX_TOOL_ROUNDS = 4; // stops a confused model from looping on tools forever
 const MAX_SEARCHES = 2;    // search_jazz calls per question; each one adds ~1k tokens to every later round
+const MAX_BOOK_SEARCHES = 2; // search_theory_books calls per question; each adds ~1.5k tokens
 const MAX_REPLY_TOKENS = 1200; // Groq counts this against the 8k tokens-per-minute free limit on every call
 const MAX_RATE_LIMIT_WAIT_S = 15;
 
@@ -46,11 +48,12 @@ function stripToolMarkup(text) {
 const SYSTEM_PROMPT = `You are Jazz Fact Chat, a friendly expert on jazz: musicians, albums, history, and theory.
 
 How to answer any jazz question:
-1. If you're confident and it's well established (famous albums, major careers, standard theory), just answer. No tool needed.
+1. If you're confident and it's well established (famous albums, major careers, very basic theory), just answer. No tool needed.
 2. If you're not sure, or it's specific or obscure (who played on a record, who someone recorded with, how many albums two players made together, exact dates), look it up first:
    - album_lineup for the personnel and year of one named album (MusicBrainz).
    - search_jazz for everything else: discographies, sideman work, collaborations, counts, lesser-known players. It searches Wikipedia, All About Jazz and other jazz references.
    - lookup_musician for a quick bio.
+   - search_theory_books for theory, harmony, improvisation, voicings, arranging, practice and jazz-history questions (what is it, how does it work, how do I play it). Use it before answering from memory.
 3. Fallback: if a tool finds nothing or not enough, try search_jazz with a better query before giving up. Never guess titles and test them one by one.
 4. If your sources don't have the answer, say so plainly. Don't invent names, dates, personnel or numbers.
 5. Keep it to one or two searches when you can, then answer.
@@ -58,6 +61,7 @@ How to answer any jazz question:
 Other tools:
 - chord_chart: whenever the user asks for chords, changes, or a chart for a tune. Pass the key if they name one.
 - random_jazz_fact: only when the user asks for a fun fact or trivia.
+- search_theory_books: write the query as a descriptive question. Its passages are background only: explain them in your own words, never quote or copy phrasing, and do not mention where the information came from. This is the one tool you do not name as a source. Stick to what the passages say: if the question leaves something open (a chord's quality, a key, an instrument), say what you are assuming or ask, rather than silently picking one. Do not spell out chords or voicings note by note (you often get accidentals and intervals wrong): describe them by chord function (3rd, 7th, 9th, 13th) and give note names only when a passage does.
 
 Chord charts:
 - When chord_chart finds the tune, the app shows the full chart to the user automatically, right under your reply. Do NOT write out the chords yourself. Just add one or two short sentences (e.g. the key and form, or a practice tip).
@@ -65,9 +69,9 @@ Chord charts:
 - Never transpose a chart yourself; ask chord_chart for the key instead. Never write out melodies or lyrics.
 
 Style:
-- When you used a tool, name the source briefly in plain parentheses, e.g. "(per Wikipedia)". Do not use 【】 brackets, footnote markers, or citation tokens.
+- When you used a tool, name the source briefly in plain parentheses, e.g. "(per Wikipedia)". Do not use 【】 brackets, footnote markers, or citation tokens. Exception: never name a source for search_theory_books.
 - Be concise: a short paragraph or a short bullet list. Do not use tables.
-- If a question is not about jazz or music, briefly steer back to jazz.`;
+- Stay on jazz: musicians, recordings, history, theory, harmony, improvisation, arranging, practice and chord charts. For anything else, including instrument repair or setup, gear buying, health, legal or money advice, say in one sentence that it's outside what you cover, and steer back to jazz. Do not give how-to advice from memory on those.`;
 
 export default {
   async fetch(request, env) {
@@ -118,6 +122,7 @@ async function runConversation(messages, env) {
   const convo = [...messages];
   const trace = []; // what we report back to the browser so you can see the loop happen
   let searches = 0;
+  let bookSearches = 0;
   const charts = []; // chord charts go straight to the page, not through the model
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
@@ -171,10 +176,14 @@ async function runConversation(messages, env) {
       const started = Date.now();
       try {
         args = JSON.parse(call.function?.arguments || "{}");
-        if (name === "search_jazz" && ++searches > MAX_SEARCHES) {
+        const overLimit =
+          name === "search_jazz" && ++searches > MAX_SEARCHES ? MAX_SEARCHES
+          : name === "search_theory_books" && ++bookSearches > MAX_BOOK_SEARCHES ? MAX_BOOK_SEARCHES
+          : 0;
+        if (overLimit) {
           // Enforced in code, not just the prompt: models don't always respect "one or two searches".
           outcome = {
-            text: JSON.stringify({ error: `Search limit reached (${MAX_SEARCHES} per question). Answer now from the results you already have, or say what you couldn't find.` }),
+            text: JSON.stringify({ error: `Search limit reached (${overLimit} per question). Answer now from the results you already have, or say what you couldn't find.` }),
             isError: true,
           };
         } else {
@@ -200,7 +209,11 @@ async function runConversation(messages, env) {
         args,
         ok: !outcome.isError,
         ms: Date.now() - started,
-        preview: toModel.slice(0, 600),
+        // The trace is visible to anyone using the page, so it must never show book text.
+        preview:
+          name === "search_theory_books" && sc?.found
+            ? `${sc.passages.length} passages retrieved (similarity ${sc.scores.join(", ")}). Text not shown.`
+            : toModel.slice(0, 600),
       });
       console.log(`tool ${name}(${JSON.stringify(args)}) -> ${outcome.isError ? "error" : "ok"} in ${Date.now() - started}ms`);
     }
@@ -276,9 +289,9 @@ async function chatWithFallback(messages, env, tools, toolChoice) {
     try {
       return await callProvider(p, messages, tools, toolChoice);
     } catch (err) {
-      // Rate limited with a short wait (e.g. Groq: "Please try again in 11.2s")? Waiting once
+      // Rate limited with a short wait (Groq words it "435ms", "11.2s" or "1m5.2s")? Waiting once
       // beats falling back to a free-router model that may handle tools badly.
-      const wait = Number(err.message.match(/try again in ([\d.]+)s/i)?.[1]);
+      const wait = parseRetryWaitSeconds(err.message);
       if (err.message.includes("HTTP 429") && wait > 0 && wait <= MAX_RATE_LIMIT_WAIT_S) {
         console.warn(`${p.name} rate-limited; waiting ${wait}s and retrying once`);
         await new Promise((r) => setTimeout(r, Math.ceil(wait * 1000) + 250));
