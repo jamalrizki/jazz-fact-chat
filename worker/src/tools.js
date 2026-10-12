@@ -18,6 +18,7 @@
 import FACTS from "./jazz-facts.json" with { type: "json" };
 import CHARTS from "./chord-charts.json" with { type: "json" };
 import { searchBooks } from "./books.js";
+import { chordVoicings } from "./voicings.js";
 
 // Wikipedia and MusicBrainz both ask API clients to identify themselves.
 const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/jamalrizki/jazz-fact-chat)";
@@ -128,6 +129,27 @@ export const TOOLS = [
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: chordChart,
+  },
+  {
+    name: "chord_voicings",
+    title: "Chord tones, inversions and chord-scales",
+    description:
+      "Spells any chord symbol correctly in code: chord tones, inversions, rootless form. Use for every question about the notes of a chord or which scale fits it. " +
+      "Takes standard symbols: triads (C, Cm, Cdim, Caug, Csus4), 6ths, 7ths and extensions (Cmaj7, Cm7b5, Cdim7, C9, Cm11, C13), alterations (C7b9, C7#11, C7alt), add and slash chords (Cadd9, C/E). " +
+      "A bare root returns labelled examples instead of assuming a quality. scale: true adds the usual chord-scale. " +
+      "check_notes verifies notes from elsewhere against the chord and its scale. Copy note names exactly.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        chord: { type: "string", maxLength: 24, description: "Chord symbol, e.g. \"Ebmaj7\", \"F#7\", \"Bm7b5\"." },
+        scale: { type: "boolean" },
+        check_notes: { type: "array", maxItems: 8, items: { type: "string", maxLength: 3 } },
+      },
+      required: ["chord"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false }, // pure computation, no network, no book text
+    handler: chordVoicings,
   },
   {
     name: "search_theory_books",
