@@ -1,5 +1,5 @@
 /**
- * Jazz Fact Chat — tools. The single source of truth.
+ * Jaizz Chat — tools. The single source of truth.
  *
  * Each tool is defined ONCE, in MCP's native shape:
  *   name, title, description, inputSchema (JSON Schema), annotations, handler

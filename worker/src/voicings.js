@@ -1,5 +1,5 @@
 /**
- * Jazz Fact Chat — spell any chord symbol, computed entirely in code.
+ * Jaizz Chat — spell any chord symbol, computed entirely in code.
  *
  * Why this exists (decision 19): the model got note spelling wrong ("G" as the
  * major 7th of A, G# in an A13) and ignored a prompt rule telling it not to

@@ -1,5 +1,5 @@
 /**
- * Jazz Fact Chat — MCP client, as used by our chat "host".
+ * Jaizz Chat — MCP client, as used by our chat "host".
  *
  * Our chat loop now plays the same role Claude Desktop does: it is an MCP
  * host. It doesn't import tool code directly. It asks an MCP server what tools

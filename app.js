@@ -1,4 +1,4 @@
-// Jazz Fact Chat — frontend. No secrets here: this file is public on GitHub Pages.
+// Jaizz Chat — frontend. No secrets here: this file is public on GitHub Pages.
 
 const { WORKER_URL } = window.APP_CONFIG; // set in config.js
 
@@ -330,15 +330,30 @@ function renderMarkdown(src) {
 /* ---------- sending ---------- */
 
 function setBusy(busy) {
+  document.body.classList.toggle("busy", busy); // the marquee bulbs chase while we wait
   input.disabled = busy;
   sendBtn.disabled = busy;
   sendBtn.textContent = busy ? "…" : "Send";
 }
 
+// The answer landed: the marquee bulbs hit two stabs, then go back to the backbeat.
+function playStabs() {
+  document.body.classList.remove("hit");
+  void document.body.offsetWidth; // restart the stabs if they're still playing
+  document.body.classList.add("hit");
+  setTimeout(() => document.body.classList.remove("hit"), 800);
+}
+
 async function send(text) {
+  if (examplesEl) examplesEl.hidden = true;
   history.push({ role: "user", content: text });
   addMessage("user", text);
-  const pending = addMessage("assistant pending", "Thinking… (tool calls can take a few seconds)");
+  const pending = addMessage("assistant pending", "");
+  // Fixed markup only (no user text), so innerHTML is safe here.
+  pending.innerHTML = '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="thinking-label">Thinking</span>';
+  pending.setAttribute("aria-label", "Thinking");
+  const labelEl = pending.querySelector(".thinking-label");
+  const slowTimer = setTimeout(() => { labelEl.textContent = "Looking things up, this can take a few seconds"; }, 4000);
   setBusy(true);
 
   try {
@@ -355,6 +370,7 @@ async function send(text) {
     for (const chart of data.charts || []) chatEl.appendChild(renderIrealChart(chart));
     if (data.tools?.length) renderToolTrace(data.tools);
     history.push({ role: "assistant", content: data.reply });
+    playStabs();
 
     const toolNote = data.tools?.length ? `tools: ${data.tools.map((t) => t.name).join(", ")}` : "no tools (answered from model knowledge)";
     statusEl.textContent = `Answered by ${data.model} via ${data.provider} · ${toolNote}`;
@@ -364,6 +380,8 @@ async function send(text) {
     pending.textContent = err.message;
     history.pop(); // drop the failed user turn so a retry doesn't duplicate it
   } finally {
+    clearTimeout(slowTimer);
+    pending.removeAttribute("aria-label");
     setBusy(false);
     input.focus();
   }
@@ -388,5 +406,27 @@ input.addEventListener("keydown", (e) => {
 function autoGrow() {
   input.style.height = "auto";
   input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  input.style.overflowY = input.scrollHeight > 160 ? "auto" : "hidden";
 }
 input.addEventListener("input", autoGrow);
+
+// Phones: the full placeholder doesn't fit on one line, so use a shorter one.
+const LONG_PLACEHOLDER = input.placeholder;
+const narrow = window.matchMedia("(max-width: 600px)");
+const tiny = window.matchMedia("(max-width: 420px)");
+function setPlaceholder() {
+  input.placeholder = tiny.matches ? "Ask me about jazz…" : narrow.matches ? "Ask about a player or a tune…" : LONG_PLACEHOLDER;
+}
+narrow.addEventListener("change", setPlaceholder);
+tiny.addEventListener("change", setPlaceholder);
+setPlaceholder();
+
+// Example prompts: a click fills the input (the user still presses Send).
+const examplesEl = document.getElementById("examples");
+examplesEl?.addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  input.value = chip.textContent;
+  autoGrow();
+  input.focus();
+});

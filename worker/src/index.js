@@ -1,5 +1,5 @@
 /**
- * Jazz Fact Chat — Cloudflare Worker
+ * Jaizz Chat — Cloudflare Worker
  * Phase 3: proxy + tool-use loop, with tools served over MCP.
  *
  * The tool-use loop, in one picture:
@@ -37,6 +37,23 @@ const MAX_RATE_LIMIT_WAIT_S = 15;
 // instead of using the structured tool_calls field. Never show that to the user.
 const LEAKED_TOOL_MARKUP = /<\/?[\w-]*(function_call|tool_call|invoke|parameter)\b|<\|[^|>]*\|>/i;
 
+// The prompt says not to cite sources, but the model sometimes still adds
+// "(Source: MusicBrainz)" or "(per Wikipedia)". Remove those in code.
+// "per / via / according to" only count when a known source follows, so
+// "(per bar)" or "(via the ii–V)" survive.
+const SOURCE_NAMES = "wikipedia|musicbrainz|all ?about ?jazz|aaj|discogs|jazzdisco|tavily|ireal|[a-z]+_[a-z_]+";
+const SOURCE_TAG = new RegExp(
+  `[ \\t]*\\((?:sources?\\s*:\\s*[^()\\n]{1,60}|(?:per|via|according to)\\s+(?:the\\s+)?(?:${SOURCE_NAMES})\\b[^()\\n]{0,40})\\)`,
+  "gi",
+);
+function stripSourceTags(text) {
+  return text
+    .replace(SOURCE_TAG, "")
+    .replace(/[ \t]*【[^】]*】/g, "")
+    .replace(/[ \t]+([.,;:!?])/g, "$1")
+    .trim();
+}
+
 function stripToolMarkup(text) {
   return text
     .replace(/<([\w-]*(?:function_call|tool_call))\b[\s\S]*?<\/\1>/gi, "")
@@ -45,7 +62,7 @@ function stripToolMarkup(text) {
     .trim();
 }
 
-const SYSTEM_PROMPT = `You are Jazz Fact Chat, a friendly expert on jazz: musicians, albums, history, and theory.
+const SYSTEM_PROMPT = `You are Jaizz Chat, a friendly expert on jazz: musicians, albums, history, and theory.
 
 How to answer any jazz question:
 1. If you're confident and it's well established (famous albums, major careers, very basic theory), just answer. No tool needed.
@@ -62,7 +79,7 @@ Other tools:
 - chord_chart: whenever the user asks for chords, changes, or a chart for a tune. Pass the key if they name one.
 - chord_voicings: chord tones, spelling, inversions, rootless voicings, and which scale fits a chord (scale: true). See Chord notes.
 - random_jazz_fact: only when the user asks for a fun fact or trivia.
-- search_theory_books: write the query as a descriptive question. Its passages are background only: explain them in your own words, never quote or copy phrasing, and do not mention where the information came from. This is the one tool you do not name as a source. Stick to what the passages say: if the question leaves something open (a chord's quality, a key, an instrument), say what you are assuming or ask, rather than silently picking one. Never spell chords or voicings note by note yourself (you often get accidentals and intervals wrong): note names come from chord_voicings only.
+- search_theory_books: write the query as a descriptive question. Its passages are background only: explain them in your own words, never quote or copy phrasing, and do not mention where the information came from. Stick to what the passages say: if the question leaves something open (a chord's quality, a key, an instrument), say what you are assuming or ask, rather than silently picking one. Never spell chords or voicings note by note yourself (you often get accidentals and intervals wrong): note names come from chord_voicings only.
 
 Chord notes:
 - Every note name for a chord, inversion or voicing comes from chord_voicings, copied exactly; never spell notes yourself. Say only what the tool returned: no claims about a voicing's sound or style.
@@ -74,7 +91,7 @@ Chord charts:
 - Never transpose a chart yourself; ask chord_chart for the key instead. Never write out melodies or lyrics.
 
 Style:
-- When you used a tool, name the source briefly in plain parentheses, e.g. "(per Wikipedia)". Do not use 【】 brackets, footnote markers, or citation tokens. Exception: never name a source for search_theory_books.
+- Never name or cite sources in your answer: no "(Source: …)", "(per Wikipedia)", 【】 brackets, footnote markers or citation tokens. The page already shows which tools ran.
 - Be concise: a short paragraph or a short bullet list. Do not use tables.
 - Stay on jazz: musicians, recordings, history, theory, harmony, improvisation, arranging, practice and chord charts. For anything else, including instrument repair or setup, gear buying, health, legal or money advice, say in one sentence that it's outside what you cover, and steer back to jazz. Do not give how-to advice from memory on those.`;
 
@@ -163,6 +180,7 @@ async function runConversation(messages, env) {
             : "Sorry, something went wrong putting an answer together. Please ask again.";
         }
       }
+      reply = stripSourceTags(reply);
       if (!reply) throw new Error("Empty reply from model");
       return { reply, provider, model, tools: trace, charts };
     }
@@ -276,7 +294,7 @@ function providerList(env) {
       url: "https://openrouter.ai/api/v1/chat/completions",
       key: env.OPENROUTER_API_KEY,
       model: env.OPENROUTER_MODEL,
-      headers: { "X-Title": "Jazz Fact Chat" },
+      headers: { "X-Title": "Jaizz Chat" },
     });
   }
   return providers;

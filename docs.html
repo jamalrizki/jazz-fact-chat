@@ -3,26 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>How Jazz Fact Chat Works</title>
-  <meta name="description" content="The tools behind Jazz Fact Chat, when the model calls them, and how to use its MCP server.">
-  <meta name="theme-color" content="#050507">
+  <title>How Jaizz Chat Works</title>
+  <meta name="description" content="The tools behind Jaizz Chat, when the model calls them, and how to use its MCP server.">
+  <meta name="theme-color" content="#0e0c10">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tilt+Neon&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=Roboto+Condensed:wght@500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Limelight&family=Space+Grotesk:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="docs">
   <header>
-    <nav class="topnav"><a href="index.html">← Back to the chat</a></nav>
+    <nav class="topnav"><a href="index.html"><span class="arrow" aria-hidden="true">←</span> Back to the chat</a></nav>
     <h1>How it works</h1>
-    <p class="tagline">Tools, tool calls, and the MCP server behind Jazz Fact Chat.</p>
+    <p class="tagline">Tools, tool calls, and the MCP server behind Jaizz Chat.</p>
   </header>
 
   <main>
     <section>
       <h2>The short version</h2>
       <p>
-        Jazz Fact Chat is a chat app backed by a free open-weight model (<code>gpt-oss-120b</code> on Groq,
+        Jaizz Chat is a chat app backed by a free open-weight model (<code>gpt-oss-120b</code> on Groq,
         with OpenRouter's free models as a fallback). On its own, the model will confidently make up who played
         on a record. So it is given <strong>tools</strong>: small functions that fetch real data from
         Wikipedia, All About Jazz, MusicBrainz, a curated fact list, and a library of chord charts. The model answers well-known

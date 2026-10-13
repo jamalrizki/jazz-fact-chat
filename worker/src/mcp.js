@@ -1,5 +1,5 @@
 /**
- * Jazz Fact Chat — MCP server (hand-written, no SDK).
+ * Jaizz Chat — MCP server (hand-written, no SDK).
  *
  * MCP in one paragraph: a server exposes capabilities (here: tools) to any
  * MCP client over JSON-RPC 2.0. The client first calls `initialize` to agree
@@ -26,7 +26,7 @@ import { TOOLS, hasTool, isInternalOnly, publicDefinition, resultLimit, runTool,
 // otherwise we offer our newest and the client decides whether to continue.
 export const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
 
-const SERVER_INFO = { name: "jazz-fact-chat", title: "Jazz Fact Chat", version: "0.3.0" };
+const SERVER_INFO = { name: "jazz-fact-chat", title: "Jaizz Chat", version: "0.3.0" };
 const INSTRUCTIONS =
   "Jazz reference tools. Use album_lineup for album personnel and release years, " +
   "lookup_musician for biographies, and random_jazz_fact for trivia.";

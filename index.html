@@ -3,27 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Jazz Fact Chat</title>
-  <meta name="description" content="A small AI chat about jazz that answers from Wikipedia and MusicBrainz using tool calls and an MCP server.">
-  <meta name="theme-color" content="#050507">
+  <title>Jaizz Chat</title>
+  <meta name="description" content="Jaizz Chat: a small AI chat about jazz players, records, theory and chord charts, built on tool calls and an MCP server.">
+  <meta name="theme-color" content="#0e0c10">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tilt+Neon&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=Roboto+Condensed:wght@500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Monoton&family=Limelight&family=Space+Grotesk:wght@400;500;600&family=Roboto+Condensed:wght@500;700&display=swap">
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Keep the page hidden until its fonts are in, so the text never re-wraps
+    // (and the page never jumps) when they swap in. Shown after 1.5 s regardless.
+    (function () {
+      var root = document.documentElement;
+      if (!document.fonts || !document.fonts.load) return;
+      root.classList.add("fonts-loading");
+      var show = function () { root.classList.remove("fonts-loading"); };
+      Promise.all([
+        document.fonts.load('400 1em "Monoton"', "JAIZZ"),
+        document.fonts.load('400 1em "Limelight"', "CHAT LOUNGE"),
+        document.fonts.load('400 1em "Space Grotesk"', "Hey there"),
+        document.fonts.load('600 1em "Space Grotesk"', "SEND")
+      ]).then(show, show);
+      setTimeout(show, 1500);
+    })();
+  </script>
 </head>
 <body>
   <header>
-    <nav class="topnav"><a href="docs.html">How it works →</a></nav>
-    <h1>Jazz Fact Chat</h1>
+    <div class="marquee" aria-hidden="true"><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i></div>
+    <h1 class="neon" aria-label="Jaizz Chat Lounge"><span class="logo" aria-hidden="true">JAIZZ</span><span class="sub" aria-hidden="true"><span class="buzz">C</span>HAT LOUNGE</span></h1>
     <p class="tagline">Ask about musicians, records, and theory.</p>
+    <p class="fine">Runs on free AI models with a small budget — may be slow or get it wrong.<br><a href="docs.html">How it works <span aria-hidden="true">→</span></a></p>
   </header>
 
   <main id="chat" aria-live="polite">
-    <div class="msg assistant">Hey there. Ask me about a player, an album, or ask for the chord chart to a tune.</div>
+    <div class="msg assistant">Hey there. Ask me about a player, an album, music theory, history — or ask for the chord chart to a popular tune.</div>
+    <div id="examples" class="examples" aria-label="Example questions">
+      <button type="button" class="chip">Chart for My Funny Valentine</button>
+      <button type="button" class="chip">Who played on A Love Supreme?</button>
+      <button type="button" class="chip">Lydian Chromatic Concept</button>
+      <button type="button" class="chip">Notes in E7#11?</button>
+    </div>
   </main>
 
   <form id="composer" autocomplete="off">
-    <textarea id="input" rows="1" placeholder="Chords for Autumn Leaves in E minor?" maxlength="4000" required></textarea>
+    <textarea id="input" rows="1" placeholder="Ask about a player, an album, theory, or a tune…" maxlength="4000" required></textarea>
     <button id="send" type="submit">Send</button>
   </form>
 

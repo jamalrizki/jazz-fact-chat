@@ -1,5 +1,5 @@
 /**
- * Jazz Fact Chat — theory-book retrieval (RAG).
+ * Jaizz Chat — theory-book retrieval (RAG).
  *
  * RAG = Retrieval-Augmented Generation. Instead of hoping the model remembers
  * what the books say, we:

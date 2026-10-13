@@ -1,4 +1,4 @@
-# Jazz Fact Chat
+# Jaizz Chat
 
 A small AI chat about jazz musicians, records, theory, and chord changes. It answers well-known questions directly, looks things up when it isn't sure, and shows chord charts in iReal Pro's layout.
 
