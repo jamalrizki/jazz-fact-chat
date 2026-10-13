@@ -72,11 +72,11 @@ async function loadTools() {
     if (data.error) throw new Error(data.error.message);
     const tools = data.result?.tools || [];
     tools.forEach((t) => listEl.append(renderTool(t)));
-    statusEl.textContent = `Live from the MCP server: ${tools.length} tools, fetched just now with tools/list.`;
+    statusEl.textContent = `Live from the MCP server: ${tools.length} public tools, fetched just now with tools/list. The book search below is used by the chat only.`;
   } catch (err) {
     statusEl.textContent =
       "Couldn't reach the MCP server right now, so the live tool list isn't shown. " +
-      "The tools are lookup_musician, album_lineup, search_jazz, random_jazz_fact, and chord_chart.";
+      "The public tools are lookup_musician, album_lineup, search_jazz, chord_chart, chord_voicings, and random_jazz_fact.";
     statusEl.classList.add("warn");
     console.error(err);
   }

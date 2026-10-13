@@ -15,7 +15,7 @@
   <header>
     <nav class="topnav"><a href="index.html"><span class="arrow" aria-hidden="true">←</span> Back to the chat</a></nav>
     <h1>How it works</h1>
-    <p class="tagline">Tools, tool calls, and the MCP server behind Jaizz Chat.</p>
+    <p class="tagline">Tools, tool calls, chord charts, the book search, and the MCP server behind Jaizz Chat.</p>
   </header>
 
   <main>
@@ -24,13 +24,19 @@
       <p>
         Jaizz Chat is a chat app backed by a free open-weight model (<code>gpt-oss-120b</code> on Groq,
         with OpenRouter's free models as a fallback). On its own, the model will confidently make up who played
-        on a record. So it is given <strong>tools</strong>: small functions that fetch real data from
-        Wikipedia, All About Jazz, MusicBrainz, a curated fact list, and a library of chord charts. The model answers well-known
-        things directly and looks up anything it isn't sure of.
+        on a record, misspell a chord, or write a chart from a half-remembered lead sheet. So it is given
+        <strong>tools</strong>: small functions that fetch real data or do exact work in code.
       </p>
+      <ul>
+        <li><strong>Players and records:</strong> Wikipedia, MusicBrainz, and web search limited to jazz references (All About Jazz, Discogs, the Jazz Discography Project).</li>
+        <li><strong>Chord charts:</strong> a library of over 2,000 tunes (jazz standards, plus Brazilian, Latin, blues, country and pop) shown the way iReal Pro lays them out, in any key.</li>
+        <li><strong>Chord notes:</strong> every chord symbol is spelled by code, not by the model.</li>
+        <li><strong>Theory and practice:</strong> a search over eleven jazz theory, harmony, arranging and history books.</li>
+      </ul>
       <p>
-        The same tools are also published as an <strong>MCP server</strong>, so any MCP client (Claude, an IDE,
-        the MCP Inspector) can use them directly, without this website.
+        The model answers well-known things directly and looks up anything it isn't sure of. Most of the tools are
+        also published as an <strong>MCP server</strong>, so any MCP client (Claude, an IDE, the MCP Inspector)
+        can use them without this website.
       </p>
     </section>
 
@@ -59,13 +65,16 @@
         </li>
         <li>
           <span class="who">Worker → tool → model</span>
-          The Worker runs the tool via MCP <code>tools/call</code> and sends the result back to the model.
-          Steps 4–5 repeat (at most 4 rounds) until the model answers in plain text.
+          The Worker checks the arguments, runs the tool via MCP <code>tools/call</code>, and sends the result back
+          to the model. Steps 4–5 repeat (at most 4 rounds) until the model answers in plain text. Limits are kept
+          in code, not left to the model: at most 2 web searches and 2 book searches per question.
         </li>
         <li>
           <span class="who">Worker → browser</span>
-          You get the answer plus a trace of every tool call. Expand <strong>"Used N tools"</strong> under any
-          answer to see the exact arguments and raw results.
+          Before the answer goes out, code strips any "(Source: …)" or "(per Wikipedia)" tags the model added,
+          because the page already shows what ran. You get the answer plus a trace of every tool call: expand
+          <strong>"Used N tools"</strong> under any answer to see the exact arguments and raw results.
+          A chord chart, if there is one, comes straight from the tool to the page.
         </li>
       </ol>
     </section>
@@ -74,6 +83,15 @@
       <h2>The tools</h2>
       <p class="live-status" id="live-status">Loading the tool list from the MCP server…</p>
       <div id="tool-list"></div>
+      <article class="tool-card">
+        <h3><code>search_theory_books</code><span class="tool-title"> · Search the jazz-theory books</span></h3>
+        <p>
+          Searches eleven jazz reference books (harmony, chord-scale theory, improvisation, voicings, arranging,
+          jazz history, and how players learn and practice) and returns up to three relevant passages for the model
+          to explain in its own words.
+        </p>
+        <p class="hints">read-only · local data only · used by the chat only, not listed on the public MCP server (the passages are copyrighted book text)</p>
+      </article>
     </section>
 
     <section>
@@ -83,16 +101,68 @@
         In practice:
       </p>
       <ul>
-        <li><strong>"Who played drums on <em>Kind of Blue</em>?"</strong> → <code>album_lineup</code>. Any question about personnel or release year. The description says never to answer these from memory.</li>
+        <li><strong>"Who played on <em>A Love Supreme</em>?"</strong> → <code>album_lineup</code>. Any question about personnel or release year. The description says never to answer these from memory.</li>
         <li><strong>"Who was Mary Lou Williams?"</strong> → <code>lookup_musician</code>. Biography, dates, instruments, career.</li>
-        <li><strong>"How many albums did Miles Davis make with John Coltrane?"</strong> → <code>search_jazz</code>. The general fallback: it searches Wikipedia (plus All About Jazz, Discogs and the Jazz Discography Project when configured) and returns only the passages relevant to the question. The model uses it whenever it isn't sure, and whenever another tool comes back empty.</li>
+        <li><strong>"How many albums did Miles Davis make with John Coltrane?"</strong> → <code>search_jazz</code>. The general fallback: it searches Wikipedia (plus All About Jazz, Discogs and the Jazz Discography Project) and returns only the passages relevant to the question. The model uses it whenever it isn't sure, and whenever another tool comes back empty.</li>
+        <li><strong>"Chart for My Funny Valentine in F."</strong> → <code>chord_chart</code>. See <a href="#charts">Chord charts</a>.</li>
+        <li><strong>"What notes are in E7#11?"</strong> → <code>chord_voicings</code>. See <a href="#notes">Chord notes</a>.</li>
+        <li><strong>"Explain the Lydian Chromatic Concept."</strong> → <code>search_theory_books</code>. Theory, harmony, improvisation, voicings, arranging, practice and history. See <a href="#books">The book search</a>.</li>
         <li><strong>"Tell me a fun jazz fact."</strong> → <code>random_jazz_fact</code>. Only for trivia requests, never to answer a specific question.</li>
-        <li><strong>"Chords for Autumn Leaves in E minor."</strong> → <code>chord_chart</code>. Changes come from a curated library and are transposed in code, not by the model, because transposition is exact arithmetic that models often get wrong. For tunes outside the library, the model says so and suggests ones it has. It doesn't guess, because a confident-looking wrong chart is worse than none.</li>
-        <li><strong>"What's a ii–V–I?"</strong> → no tool. General theory is something the model knows well enough.</li>
+        <li><strong>"What instrument did Charlie Parker play?"</strong> → no tool. Well-established facts are something the model knows well enough.</li>
       </ul>
       <p>
         If a tool finds nothing, the model is instructed to say so instead of filling the gap from memory. Ask about
-        an obscure record and you'll usually get "MusicBrainz doesn't list the personnel" rather than invented names.
+        an obscure record and you'll usually hear that the personnel isn't listed, rather than invented names.
+        The chat also stays on jazz: questions about gear, repairs, health, legal or money matters get a one-line "that's outside what I cover".
+      </p>
+    </section>
+
+    <section id="charts">
+      <h2>Chord charts</h2>
+      <p>
+        Charts come from a curated library built from iReal Pro playlists: over 2,000 tunes, from jazz standards to
+        Brazilian, Latin, blues, country and pop. They are drawn the way iReal Pro writes them, with sections,
+        repeats and first and second endings.
+      </p>
+      <ul>
+        <li><strong>Never from memory.</strong> If a tune isn't in the library, the chat says so and suggests close matches. A confident-looking wrong chart is worse than none.</li>
+        <li><strong>Any key, transposed in code.</strong> Transposition is exact arithmetic that language models often get wrong, so the model only asks for the key.</li>
+        <li><strong>The chart skips the model.</strong> The tool sends the chart straight to the page as data; the model just adds a sentence or two about the key or form.</li>
+        <li><strong>The library itself isn't published.</strong> It ships with the Worker; the source code includes a 12-tune sample.</li>
+      </ul>
+    </section>
+
+    <section id="notes">
+      <h2>Chord notes, spelled in code</h2>
+      <p>
+        Language models get accidentals and intervals wrong surprisingly often. So every note name the chat gives
+        you for a chord comes from <code>chord_voicings</code>, a small piece of code that reads chord symbols the
+        way a musician does:
+      </p>
+      <ul>
+        <li>A chord symbol is read as degrees of the root's major scale: <code>7</code> is the lowered 7th, <code>#11</code> the raised 4th, and so on. Triads, 6ths, 7ths, extensions, alterations, <code>alt</code>, add chords and slash chords all work.</li>
+        <li>Each note gets its letter first, then its sharp or flat, so spellings are correct, not just the right keys: E7#11 is E G♯ B D A♯, and G♯maj7 is G♯ B♯ D♯ F𝄪.</li>
+        <li>It also gives inversions and the rootless form, and, if asked, the usual chord-scale (Dorian for m7, Lydian dominant for 7#11, altered for 7alt, and so on).</li>
+        <li>It can check notes from elsewhere against a chord and its scale.</li>
+        <li>Give it just a root ("a rootless A chord") and it shows labelled examples instead of guessing the quality.</li>
+      </ul>
+    </section>
+
+    <section id="books">
+      <h2>The book search</h2>
+      <p>
+        For theory and practice questions, the chat searches eleven jazz books covering harmony, chord-scale theory,
+        improvisation, voicings, arranging and jazz history. This is <em>retrieval-augmented generation</em> (RAG):
+      </p>
+      <ol>
+        <li>The books were split into short passages ahead of time, and each passage was turned into a list of numbers (an <em>embedding</em>) that captures its meaning.</li>
+        <li>Your question gets the same treatment, and the 30 passages closest in meaning come back from a vector database.</li>
+        <li>A second model (a <em>reranker</em>) scores how well each passage actually answers your question. Being close in meaning isn't the same as being relevant, so passages below a fixed score are dropped.</li>
+        <li>The best three go to the chat model, which explains them in its own words. If none pass, it says it didn't find anything rather than improvising.</li>
+      </ol>
+      <p>
+        The books are private copies. Answers never quote them or name them, and the search isn't offered on the
+        public MCP server, so the book text only ever reaches the model.
       </p>
     </section>
 
@@ -103,6 +173,7 @@
         <li><strong>Transport:</strong> Streamable HTTP, stateless. Each JSON-RPC message is one POST; responses are plain JSON.</li>
         <li><strong>Methods:</strong> <code>initialize</code>, <code>ping</code>, <code>tools/list</code>, <code>tools/call</code>.</li>
         <li><strong>Capabilities:</strong> tools only (no resources or prompts). No authentication. All tools are read-only.</li>
+        <li><strong>Tools:</strong> six of the seven. The book search is used by this site's chat only.</li>
       </ul>
       <p>List the tools from a terminal:</p>
       <pre class="code" id="curl-example">curl -s …/mcp \
@@ -119,8 +190,9 @@
       <h2>Honest limits</h2>
       <ul>
         <li>The model is free and open-weight. Tools make it far more accurate, but it can still misread a result or skip a tool call. Check the tool trace.</li>
-        <li>MusicBrainz is community-edited. Plenty of jazz records have no personnel credits there, and the app will tell you so.</li>
-        <li>Free tiers are rate-limited. If Groq is busy, OpenRouter answers instead (the footer shows which one did).</li>
+        <li>MusicBrainz is community-edited. Plenty of jazz records have no personnel credits there, and some listings include players from bonus tracks on a later reissue.</li>
+        <li>The book search reads text, not notation. Ideas explained in words come through well; voicings printed only as music examples don't, which is why chord notes come from code instead.</li>
+        <li>Free tiers are rate-limited. Busy moments can mean a short wait; if Groq is busy, OpenRouter answers instead (the line under each answer shows which one did).</li>
       </ul>
     </section>
 
@@ -129,13 +201,14 @@
       <ul>
         <li>API keys are Cloudflare Worker secrets. They are not in the page or the repository.</li>
         <li>The chat endpoint only accepts requests from this site's origin. The browser can send only user and assistant messages, so it can't override the system prompt or forge a tool result.</li>
-        <li>Tool arguments come from the model, so they're validated and URL-encoded before any request goes out. Results are size-capped.</li>
+        <li>Tool arguments come from the model, so they're validated and URL-encoded before any request goes out. Chord symbols that don't fit the grammar are rejected with a fixed message. Results are size-capped.</li>
+        <li>Browsers can only call the MCP server from allowed origins; desktop and command-line MCP clients send no origin and are allowed. Internal-only tools are neither listed nor callable there.</li>
       </ul>
     </section>
   </main>
 
   <footer class="docs-footer">
-    Built with a Cloudflare Worker, GitHub Pages, Groq, Wikipedia, and MusicBrainz. Total running cost: $0.
+    Built with a Cloudflare Worker, Workers AI, Vectorize, GitHub Pages, Groq, Wikipedia, and MusicBrainz. Total running cost: $0.
     <a href="https://github.com/jamalrizki/jazz-fact-chat" target="_blank" rel="noopener noreferrer">Source on GitHub</a>.
   </footer>
 
