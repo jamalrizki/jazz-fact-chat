@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Runs before `npm run dev` and `npm run deploy`.
+// Runs before `npm run dev`, `npm run deploy` and `npm test`.
 // The full chord library (src/chord-charts.json) is gitignored. On a fresh clone
 // it doesn't exist yet, so fall back to the small sample library that IS committed.
 import { existsSync, copyFileSync } from "node:fs";

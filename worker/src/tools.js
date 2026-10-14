@@ -132,20 +132,25 @@ export const TOOLS = [
   },
   {
     name: "chord_voicings",
-    title: "Chord tones, inversions and chord-scales",
+    title: "Chord tones, inversions, chord-scales and intervals",
     description:
-      "Spells any chord symbol correctly in code: chord tones, inversions, rootless form. Use for every question about the notes of a chord or which scale fits it. " +
-      "Takes standard symbols: triads (C, Cm, Cdim, Caug, Csus4), 6ths, 7ths and extensions (Cmaj7, Cm7b5, Cdim7, C9, Cm11, C13), alterations (C7b9, C7#11, C7alt), add and slash chords (Cadd9, C/E). " +
-      "A bare root returns labelled examples instead of assuming a quality. scale: true adds the usual chord-scale. " +
-      "check_notes verifies notes from elsewhere against the chord and its scale. Copy note names exactly.",
+      "Spells chords and names intervals in code. Use for every question about the notes of a chord, which scale fits it, or interval names. Copy names exactly. " +
+      "chord: standard symbols (C, Cm7b5, Cdim7, C13, C7#11, C7alt, Cadd9, C/E) give chord tones, inversions, rootless form; a bare root returns labelled examples. " +
+      "scale: true adds the usual chord-scale; check_notes verifies notes against the chord and scale. " +
+      "intervals: notes low to high, names each gap. stack: note + interval (P4, A4, M3...) + note count, e.g. C P4 4 = C F Bb Eb. Give one of chord, intervals, stack.",
     inputSchema: {
       type: "object",
       properties: {
-        chord: { type: "string", maxLength: 24, description: "Chord symbol, e.g. \"Ebmaj7\", \"F#7\", \"Bm7b5\"." },
+        chord: { type: "string", maxLength: 24, description: "e.g. \"Ebmaj7\"" },
         scale: { type: "boolean" },
         check_notes: { type: "array", maxItems: 8, items: { type: "string", maxLength: 3 } },
+        intervals: { type: "array", maxItems: 8, items: { type: "string", maxLength: 3 } },
+        stack: {
+          type: "object",
+          properties: { note: { type: "string" }, interval: { type: "string" }, count: { type: "integer", minimum: 2, maximum: 8 } },
+          required: ["note", "interval", "count"],
+        },
       },
-      required: ["chord"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false }, // pure computation, no network, no book text
