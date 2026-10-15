@@ -37,7 +37,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | `album_lineup` | MusicBrainz | Personnel and release year of one album |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
 | `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key |
-| `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord. Also names the intervals between given notes and builds stacks of one interval (quartal voicings: C P4 ×4 = C F B♭ E♭) |
+| `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord |
 | `random_jazz_fact` | Local JSON | Trivia |
 | `search_theory_books` | Workers AI + Vectorize, reranked | Theory, harmony, improvisation, arranging, practice and history questions (max 2 per question). **Internal only:** the chat uses it, but the public `/mcp` endpoint doesn't list or run it, because the passages are copyrighted book text. |
 
@@ -65,7 +65,7 @@ All `npm` and `npx wrangler` commands run from the `worker/` folder.
 
 Port 8000 or 8787 already taken? `lsof -nP -iTCP:8000 -iTCP:8787 -sTCP:LISTEN` shows what's holding it.
 
-**Tests** (from `worker/`): `npm test`. On a fresh clone this first copies in the sample chord library, which the tests need.
+**Tests** (from `worker/`): `node --test test/voicings.test.js`
 
 **Logs from the deployed Worker** (from `worker/`): `npx wrangler tail`
 
@@ -115,12 +115,12 @@ worker/src/index.js              chat endpoint, system prompt, tool-use loop, pr
 worker/src/mcp.js                hand-written MCP server (JSON-RPC 2.0); hides internal-only tools from /mcp
 worker/src/mcp-client.js         in-process MCP client + MCP → OpenAI tool conversion
 worker/src/tools.js              tool definitions and implementations
-worker/src/voicings.js           chord-symbol grammar, note spelling, interval names and stacks (chord_voicings)
+worker/src/voicings.js           chord-symbol grammar and note spelling (chord_voicings)
 worker/src/books.js              book search: embed, vector search, rerank, pick passages
 worker/src/retry-wait.js         reads Groq's "try again in …" waits (435ms, 11.2s, 1m5.2s)
 worker/scripts/import-ireal.mjs  iReal Pro export → chord library
 worker/scripts/embed-books.mjs   book chunks → vectors (Workers AI)
-worker/test/voicings.test.js     chord-spelling and interval tests
+worker/test/voicings.test.js     chord-spelling tests
 rag/                             OCR and chunking for the books
 ```
 

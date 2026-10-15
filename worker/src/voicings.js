@@ -19,10 +19,6 @@
  * 3rd, 5th, 7th and alterations (e.g. m7 -> Dorian, 7#11 -> Lydian dominant).
  * check_notes verifies notes from anywhere (a book, the model) against the chord and that scale.
  *
- * Intervals and stacks (quartal voicings etc.): the chat once called C-F#-B-E "stacked augmented 4ths"
- * and F-B-E "perfect 4ths" (F-B is a tritone). Interval names follow the same letter-first rule:
- * the number is the letter distance, the quality is whatever the semitones make it.
- *
  * Pure functions, no network. The arguments are untrusted, so everything is
  * validated here, and nothing the caller typed is echoed back unless the whole
  * symbol parsed through the whitelist grammar.
@@ -266,121 +262,13 @@ function describe(letter, root, rootPc, quality, bass, { scale = false, checkNot
   return result;
 }
 
-/* ---------- intervals and stacks ---------- */
-
-const MAX_INTERVAL_NOTES = 8;
-// Interval number -> semitones of its perfect or major form, and whether it is a "perfect" class interval.
-const INTERVAL_REF = { 1: [0, true], 2: [2, false], 3: [4, false], 4: [5, true], 5: [7, true], 6: [9, false], 7: [11, false], 8: [12, true] };
-const ORDINAL = { 1: "unison", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th", 7: "7th", 8: "octave" };
-const QUALITY_NAMES = { P: "perfect", M: "major", m: "minor", A: "augmented", d: "diminished", AA: "doubly augmented", dd: "doubly diminished" };
-const PERFECT_Q = { "-2": "dd", "-1": "d", 0: "P", 1: "A", 2: "AA" };
-const MAJOR_Q = { "-3": "dd", "-2": "d", "-1": "m", 0: "M", 1: "A", 2: "AA" };
-
-/** Untrusted note name -> "C", "F#", "Bbb". Throws without echoing the input. */
-function parseNote(n, bad) {
-  if (typeof n !== "string" || n.length > 3) throw bad();
-  const x = normalize(n);
-  if (!/^[A-G](##|#|bb|b)?$/.test(x)) throw bad();
-  return x;
-}
-
-const longName = (q, num) => {
-  const base = num === 8 ? (q === "P" ? "octave" : `${QUALITY_NAMES[q]} octave`) : num === 1 ? `${QUALITY_NAMES[q]} unison` : `${QUALITY_NAMES[q]} ${ORDINAL[num]}`;
-  return (q === "A" && num === 4) || (q === "d" && num === 5) ? `${base} (tritone)` : base;
-};
-
-/** Name the interval from a up to b (b is the next note up, within an octave). Spelled by letter, like chords. */
-function intervalUp(a, b) {
-  let steps = mod(LETTERS.indexOf(b[0]) - LETTERS.indexOf(a[0]), 7);
-  let semis = mod(notePc(b) - notePc(a), 12);
-  // Same letter: a repeated note in a voicing is the octave above (C up to Cb = diminished octave).
-  if (steps === 0 && (semis === 0 || semis > 6)) { steps = 7; if (semis === 0) semis = 12; }
-  // (semis is mod 12, so C up to B# reads 0; the true size is ref + diff below.)
-  const num = steps + 1;
-  const [ref, perfect] = INTERVAL_REF[num];
-  let diff = semis - ref;
-  if (diff > 6) diff -= 12;
-  if (diff < -6) diff += 12;
-  const q = (perfect ? PERFECT_Q : MAJOR_Q)[diff];
-  if (!q) throw new Error("One of those intervals is more than doubly augmented or diminished; check the spelling of the notes.");
-  return { short: q + num, name: longName(q, num), semitones: ref + diff };
-}
-
-function nameIntervals(list) {
-  const bad = () => new Error(`"intervals" must be a list of 2 to ${MAX_INTERVAL_NOTES} note names, low to high, such as ["C", "F#", "B"]`);
-  if (!Array.isArray(list) || list.length < 2 || list.length > MAX_INTERVAL_NOTES) throw bad();
-  const notes = list.map((n) => parseNote(n, bad));
-  const gaps = notes.slice(1).map((b, i) => ({ from: notes[i], to: b, ...intervalUp(notes[i], b) }));
-  const same = gaps.every((g) => g.short === gaps[0].short);
-  return {
-    found: true,
-    notes,
-    intervals: gaps,
-    text: pretty(notes[0]) + gaps.map((g) => ` (${g.short}) ${pretty(g.to)}`).join(""),
-    all_same: same ? gaps[0].name : false,
-    note: "Interval names are exact, counted upward between neighbouring notes: copy them, add nothing.",
-  };
-}
-
-const STACK_FORMAT = '"stack" must be {"note": "C", "interval": "P4", "count": 4}: interval is P, M, m, A or d plus 2-7 (P only with 4 or 5, M and m only with 2, 3, 6, 7); count is 2-8 notes in total';
-
-/** Build notes by stacking one interval: C + P4 x4 -> C F Bb Eb. Each note spelled by letter. */
-function stackInterval(stack) {
-  const bad = () => new Error(STACK_FORMAT);
-  if (stack === null || typeof stack !== "object" || Array.isArray(stack)) throw bad();
-  const keys = Object.keys(stack);
-  if (keys.some((k) => !["note", "interval", "count"].includes(k))) throw bad();
-  const start = parseNote(stack.note, bad);
-  const { interval, count } = stack;
-  if (!Number.isInteger(count) || count < 2 || count > MAX_INTERVAL_NOTES) throw bad();
-  const m = typeof interval === "string" && interval.match(/^([PpMmAd])([2-7])$/);
-  if (!m) throw bad();
-  const q = m[1] === "p" ? "P" : m[1];
-  const num = Number(m[2]);
-  const [ref, perfect] = INTERVAL_REF[num];
-  const table = perfect ? PERFECT_Q : MAJOR_Q;
-  const diffEntry = Object.entries(table).find(([, v]) => v === q);
-  if (!diffEntry || (q === "P" && !perfect) || ((q === "M" || q === "m") && perfect)) throw bad();
-  const semis = ref + Number(diffEntry[0]);
-
-  const notes = [start];
-  let letterIdx = LETTERS.indexOf(start[0]);
-  let pc = notePc(start);
-  for (let i = 1; i < count; i++) {
-    letterIdx = (letterIdx + num - 1) % 7;
-    pc = mod(pc + semis, 12);
-    const letter = LETTERS[letterIdx];
-    let acc = mod(pc - NATURAL_PC[letter], 12);
-    if (acc > 6) acc -= 12;
-    if (Math.abs(acc) > 2) {
-      throw new Error(`Stacking further would need a triple sharp or flat after ${notes.length} notes. Ask for fewer notes or an enharmonic start note.`);
-    }
-    notes.push(letter + ACCIDENTALS[acc]);
-  }
-  return {
-    found: true,
-    stack: `${start} ${q}${num} x${count}`,
-    interval: longName(q, num),
-    notes,
-    notes_text: prettyList(notes),
-    note: "Notes run low to high, each spelled by letter: copy them exactly.",
-  };
-}
-
 /**
  * The tool. Throws Error for bad arguments and unreadable chords (runTool turns
  * a throw into an isError result). A bare root is NOT an error: it returns
  * labelled examples and asks which quality, instead of assuming one.
  */
 export function chordVoicings(args = {}) {
-  const { chord, scale, check_notes: checkNotesArg, intervals, stack } = args;
-  const present = (x) => x !== undefined && x !== null;
-  if ([chord, intervals, stack].filter(present).length !== 1) {
-    throw new Error('Give exactly one of "chord" (e.g. "Amaj7"), "intervals" (a list of notes) or "stack".');
-  }
-  if (!present(chord) && (present(scale) || present(checkNotesArg))) throw new Error('"scale" and "check_notes" only work with "chord".');
-  if (present(intervals)) return nameIntervals(intervals);
-  if (present(stack)) return stackInterval(stack);
+  const { chord, scale, check_notes: checkNotesArg } = args;
   if (typeof chord !== "string" || !chord.trim()) throw new Error('"chord" must be a non-empty string such as "Amaj7"');
   if (chord.length > MAX_CHORD_CHARS) throw new Error('"chord" is too long');
   if (scale !== undefined && scale !== null && typeof scale !== "boolean") throw new Error('"scale" must be true or false');

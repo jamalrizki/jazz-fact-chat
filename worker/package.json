@@ -8,9 +8,7 @@
     "predeploy": "node scripts/ensure-charts.mjs",
     "deploy": "wrangler deploy",
     "import": "node scripts/import-ireal.mjs",
-    "tail": "wrangler tail",
-    "pretest": "node scripts/ensure-charts.mjs",
-    "test": "node --test test/*.test.js"
+    "tail": "wrangler tail"
   },
   "devDependencies": {
     "wrangler": "^4"
