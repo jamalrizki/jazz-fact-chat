@@ -106,6 +106,7 @@
         <li><strong>"How many albums did Miles Davis make with John Coltrane?"</strong> → <code>search_jazz</code>. The general fallback: it searches Wikipedia (plus All About Jazz, Discogs and the Jazz Discography Project) and returns only the passages relevant to the question. The model uses it whenever it isn't sure, and whenever another tool comes back empty.</li>
         <li><strong>"Chart for My Funny Valentine in F."</strong> → <code>chord_chart</code>. See <a href="#charts">Chord charts</a>.</li>
         <li><strong>"What notes are in E7#11?"</strong> → <code>chord_voicings</code>. See <a href="#notes">Chord notes</a>.</li>
+        <li><strong>"Is C F♯ B E stacked 4ths?"</strong> → <code>chord_voicings</code> with <code>intervals</code>. See <a href="#notes">Chord notes</a>.</li>
         <li><strong>"Explain the Lydian Chromatic Concept."</strong> → <code>search_theory_books</code>. Theory, harmony, improvisation, voicings, arranging, practice and history. See <a href="#books">The book search</a>.</li>
         <li><strong>"Tell me a fun jazz fact."</strong> → <code>random_jazz_fact</code>. Only for trivia requests, never to answer a specific question.</li>
         <li><strong>"What instrument did Charlie Parker play?"</strong> → no tool. Well-established facts are something the model knows well enough.</li>
@@ -145,6 +146,8 @@
         <li>It also gives inversions and the rootless form, and, if asked, the usual chord-scale (Dorian for m7, Lydian dominant for 7#11, altered for 7alt, and so on).</li>
         <li>It can check notes from elsewhere against a chord and its scale.</li>
         <li>Give it just a root ("a rootless A chord") and it shows labelled examples instead of guessing the quality.</li>
+        <li>Intervals use the same letter-first rule. Give it notes low to high and it names each gap: C F♯ B E is an augmented 4th (a tritone) and then two perfect 4ths, not "stacked augmented 4ths".</li>
+        <li>It can also stack one interval from a start note, for quartal voicings: perfect 4ths from C give C F B♭ E♭.</li>
       </ul>
     </section>
 
