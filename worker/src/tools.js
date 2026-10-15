@@ -291,12 +291,17 @@ async function albumLineup({ album, artist }) {
   }
 
   // Many pressings exist per album, and personnel credits are often on only one of them.
-  // Try up to 3 pressings of the top match's release group and keep the best-credited one.
-  const groupId = candidates[0]["release-group"]?.id;
-  const sameAlbum = candidates.filter((r) => r["release-group"]?.id === groupId).slice(0, 3);
+  // Prefer the ORIGINAL issue: deluxe/expanded editions add bonus tracks with other players
+  // (A Love Supreme's deluxe set credits Archie Shepp and Art Davis, who aren't on the album).
+  // Ordering is done here in code, not left to the model. See pickPressings below.
+  // If a reissue outscores the original and sits in its own release group, anchor on the original's group.
+  const groupId = (candidates.find((r) => !isReissue(r)) || candidates[0])["release-group"]?.id;
+  const sameAlbum = pickPressings(candidates.filter((r) => r["release-group"]?.id === groupId)).slice(0, 3);
 
   let best = null;
   for (const [i, release] of sameAlbum.entries()) {
+    // Only fall back to a reissue when no original pressing had any credits at all.
+    if (best?.personnel.length && isReissue(release)) break;
     if (i > 0) await sleep(1100); // MusicBrainz allows about 1 request per second
     const full = await getJson(
       `https://musicbrainz.org/ws/2/release/${release.id}?fmt=json` +
@@ -304,6 +309,7 @@ async function albumLineup({ album, artist }) {
     );
     if (!full) continue;
     const parsed = parseRelease(full);
+    // Pressings are tried oldest-first, so on a tie the earlier (more original) one wins.
     if (!best || parsed.personnel.length > best.personnel.length) best = parsed;
     if (best.personnel.length >= 3) break; // good enough; don't spend more requests
   }
@@ -318,6 +324,26 @@ async function albumLineup({ album, artist }) {
         ? "MusicBrainz lists this album but has no personnel credits for it. Tell the user that; do not fill in names from memory."
         : undefined,
   };
+}
+
+// Reissue markers in a release's title or disambiguation. Those pressings often carry
+// bonus tracks (alternate takes, live sets) whose players weren't on the original album.
+const REISSUE_RE = /\b(deluxe|expanded|remaster(ed)?|anniversary|complete|bonus|collector'?s|legacy|special edition|box set)\b/i;
+
+const isReissue = (r) => REISSUE_RE.test(`${r.title || ""} ${r.disambiguation || ""}`);
+
+/**
+ * Order one album's pressings so the original issue comes first:
+ * plain (non-reissue) official pressings, oldest first; then other plain pressings;
+ * reissues only as a last resort. Exported for tests.
+ */
+export function pickPressings(releases) {
+  const rank = (r) => (isReissue(r) ? 2 : 0) + (!r.status || r.status === "Official" ? 0 : 1);
+  const date = (r) => (/^\d{4}/.test(r.date || "") ? r.date.padEnd(10, "-99") : "9999"); // undated last
+  return releases
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => rank(a.r) - rank(b.r) || date(a.r).localeCompare(date(b.r)) || a.i - b.i)
+    .map(({ r }) => r);
 }
 
 /* ---------- general search (the fallback) ---------- */
