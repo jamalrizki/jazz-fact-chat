@@ -38,7 +38,7 @@
       </p>
       <ul>
         <li><strong>Players and records:</strong> Wikipedia, MusicBrainz, and web search limited to jazz references (All About Jazz, Discogs, the Jazz Discography Project).</li>
-        <li><strong>Chord charts:</strong> a library of over 2,000 tunes (jazz standards, plus Brazilian, Latin, blues, country and pop) shown as jazz charts, in any key.</li>
+        <li><strong>Chord charts:</strong> a library of over 2,000 tunes, shown as jazz charts, in any key.</li>
         <li><strong>Chord notes:</strong> every chord symbol is spelled by code, not by the model.</li>
         <li><strong>Theory and practice:</strong> a search over scoped reference material on jazz theory, harmony, arranging and history.</li>
       </ul>
@@ -129,8 +129,7 @@
     <section id="charts">
       <h2>Chord charts</h2>
       <p>
-        Charts come from a curated library of jazz charts: over 2,000 tunes, from jazz standards to
-        Brazilian, Latin, blues, country and pop. They are drawn as charts, with sections,
+        Charts come from a library of over 2,000 tunes. They are drawn as charts, with sections,
         repeats and first and second endings.
       </p>
       <ul>
@@ -174,25 +173,6 @@
       </p>
     </section>
 
-    <section>
-      <h2>Use the MCP server directly</h2>
-      <p>Endpoint: <code class="mcp-url">…/mcp</code></p>
-      <ul>
-        <li><strong>Transport:</strong> Streamable HTTP, stateless. Each JSON-RPC message is one POST; responses are plain JSON.</li>
-        <li><strong>Methods:</strong> <code>initialize</code>, <code>ping</code>, <code>tools/list</code>, <code>tools/call</code>.</li>
-        <li><strong>Capabilities:</strong> tools only (no resources or prompts). No authentication. All tools are read-only.</li>
-        <li><strong>Tools:</strong> six of the seven. The reference search is used by this site's chat only.</li>
-      </ul>
-      <p>List the tools from a terminal:</p>
-      <pre class="code" id="curl-example">curl -s …/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre>
-      <p>
-        Or connect a client: in the <a href="https://modelcontextprotocol.io/docs/tools/inspector" target="_blank" rel="noopener noreferrer">MCP Inspector</a>,
-        choose <em>Streamable HTTP</em> and paste the endpoint URL. In Claude, add it as a custom connector.
-      </p>
-    </section>
 
     <section>
       <h2>Honest limits</h2>
@@ -204,19 +184,10 @@
       </ul>
     </section>
 
-    <section>
-      <h2>Security notes</h2>
-      <ul>
-        <li>API keys are Cloudflare Worker secrets. They are not in the page or the repository.</li>
-        <li>The chat endpoint only accepts requests from this site's origin. The browser can send only user and assistant messages, so it can't override the system prompt or forge a tool result.</li>
-        <li>Tool arguments come from the model, so they're validated and URL-encoded before any request goes out. Chord symbols that don't fit the grammar are rejected with a fixed message. Results are size-capped.</li>
-        <li>Browsers can only call the MCP server from allowed origins; desktop and command-line MCP clients send no origin and are allowed. Internal-only tools are neither listed nor callable there.</li>
-      </ul>
-    </section>
   </main>
 
   <footer class="docs-footer">
-    Built with a Cloudflare Worker, Workers AI, Vectorize, GitHub Pages, Groq, Wikipedia, and MusicBrainz. Total running cost: $0.
+    Built with a Cloudflare Worker, Workers AI, Vectorize, GitHub Pages, Groq, Wikipedia, and MusicBrainz. Total running cost: $0. Uses Google Analytics.
     <a href="https://github.com/jamalrizki/jazz-fact-chat" target="_blank" rel="noopener noreferrer">Source on GitHub</a>.
   </footer>
 

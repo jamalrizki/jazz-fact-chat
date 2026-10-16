@@ -4,10 +4,6 @@
 const { WORKER_URL } = window.APP_CONFIG;
 const MCP_URL = `${WORKER_URL}/mcp`;
 
-document.querySelectorAll(".mcp-url").forEach((el) => (el.textContent = MCP_URL));
-const curl = document.getElementById("curl-example");
-curl.textContent = curl.textContent.replace("…/mcp", MCP_URL);
-
 const statusEl = document.getElementById("live-status");
 const listEl = document.getElementById("tool-list");
 

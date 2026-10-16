@@ -111,7 +111,7 @@ export const TOOLS = [
     name: "chord_chart",
     title: "Chord chart for a tune",
     description:
-      "Return the chord changes for a tune from the chord library (jazz standards, plus Brazilian, Latin, blues, country and pop songs), optionally transposed to any key. " +
+      "Return the chord changes for a tune from the chord library (over 2,000 tunes, jazz and other styles), optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
       "The result includes chart_text (plain text) and layout (the chart as written). " +
       "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead.",
