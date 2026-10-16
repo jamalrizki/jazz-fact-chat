@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Turn the study books into retrieval chunks for the search_theory_books tool.
+Turn the reference material into retrieval chunks for the search_theory_books tool.
 
-    python3 rag/ingest_books.py              # every book in rag/books.json that is ready
-    python3 rag/ingest_books.py ligon gioia  # only these book ids
+    python3 rag/ingest_books.py              # every source in rag/books.json that is ready
+    python3 rag/ingest_books.py src-a src-b  # only these source ids
 
-Run from the repo root. Reads "Jazz books/" (gitignored), writes knowledge/chunks.jsonl
-and knowledge/report.txt (also gitignored: the chunks are the books' text).
+Run from the repo root. Reads "reference/" (gitignored), writes knowledge/chunks.jsonl
+and knowledge/report.txt (also gitignored).
 
   * Text PDFs: pdftotext, one page at a time.
   * Scanned PDFs ("ocr": true): read page text from knowledge/ocr/<id>/page-NNNN.txt,
@@ -14,7 +14,7 @@ and knowledge/report.txt (also gitignored: the chunks are the books' text).
   * EPUB: chapters in reading order; epubs have no fixed pages, so citations use chapters.
 
 Why the work is in code: citations must be right, so printed page numbers are detected
-here (PDF page 200 is printed page 184 in Berliner) rather than left to the model.
+here (PDF page 200 can be printed page 184) rather than left to the model.
 """
 import html, json, re, statistics, subprocess, sys, zipfile
 from collections import Counter
@@ -22,7 +22,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BOOKS_DIR = ROOT / "Jazz books"
+BOOKS_DIR = ROOT / "reference"
 OUT_DIR = ROOT / "knowledge"
 TARGET_WORDS = 300   # ~400 tokens; 3-4 chunks per answer must fit Groq's 8k tokens/minute
 MAX_WORDS = 400
@@ -176,7 +176,7 @@ EN_WORDS = re.compile(r"\b(the|and|of|is|that|with|this|are|for|to|in|it)\b", re
 OTHER_WORDS = re.compile(r"\b(il|della|delle|che|nella|sono|scala|per|una|questo|degli|le|la|di|del)\b", re.I)
 
 def mostly_english(text):
-    """The embedding model and the app are English; some editions are bilingual (Baker is Italian)."""
+    """The embedding model and the app are English; some editions are bilingual."""
     return len(EN_WORDS.findall(text)) >= 2 * len(OTHER_WORDS.findall(text))
 
 def citation(c):

@@ -52,9 +52,9 @@ function renderToolTrace(tools) {
   chatEl.appendChild(details);
 }
 
-/* ---------- iReal-style chord charts ----------
+/* ---------- chord charts ----------
  * The Worker sends charts as data ({ title, composer, key, form, style, bars }),
- * written the way iReal Pro writes them: repeats, endings, % bars and codas in place.
+ * written the way a lead sheet writes them: repeats, endings, % bars and codas in place.
  * Everything here is built with DOM methods + textContent: no model text becomes HTML.
  */
 
@@ -65,8 +65,8 @@ const h = (tag, cls, text) => {
   return n;
 };
 
-// iReal chord symbols: maj7 → Δ7, m7 → –7, m7b5 → ø7, dim7 → o7, aug → +
-function irealQuality(q) {
+// Chart chord symbols: maj7 → Δ7, m7 → –7, m7b5 → ø7, dim7 → o7, aug → +
+function sheetQuality(q) {
   const map = [
     [/^mMaj/, "–Δ"], [/^maj/, "Δ"], [/^m7b5$/, "ø7"], [/^m9b5$/, "ø9"],
     [/^dim7$/, "o7"], [/^dim$/, "o"], [/^aug$/, "+"], [/^m/, "–"],
@@ -75,29 +75,29 @@ function irealQuality(q) {
   return q.replace("6/9", "69").replace(/b(\d)/g, "♭$1").replace(/#(\d)/g, "♯$1");
 }
 
-function irealChord(sym) {
+function sheetChord(sym) {
   const span = h("span", "ch");
   const m = sym.match(/^([A-G])([b#]?)(.*?)(?:\/([A-G])([b#]?))?$/);
   if (!m) { span.append(h("span", "rt nc", sym)); return span; }
   const [, root, acc, q, bass, bassAcc] = m;
   span.append(h("span", "rt", root));
   if (acc) span.append(h("span", "ac", acc === "b" ? "♭" : "♯"));
-  if (q) span.append(h("span", "ql", irealQuality(q)));
+  if (q) span.append(h("span", "ql", sheetQuality(q)));
   if (bass) span.append(h("span", "bs", "/" + bass + (bassAcc === "b" ? "♭" : bassAcc === "#" ? "♯" : "")));
   return span;
 }
 
-function renderIrealChart(chart) {
-  const wrap = h("div", "ireal");
-  const head = h("div", "ireal-head");
+function renderSheetChart(chart) {
+  const wrap = h("div", "sheet");
+  const head = h("div", "sheet-head");
   head.append(
-    h("div", "ireal-style", chart.style ? `(${chart.style})` : ""),
-    h("div", "ireal-title", chart.title),
-    h("div", "ireal-composer", chart.composer && chart.composer !== "unknown" ? chart.composer : "")
+    h("div", "sheet-style", chart.style ? `(${chart.style})` : ""),
+    h("div", "sheet-title", chart.title),
+    h("div", "sheet-composer", chart.composer && chart.composer !== "unknown" ? chart.composer : "")
   );
-  wrap.append(head, h("div", "ireal-sub", [chart.key, chart.form].filter(Boolean).join(" · ")));
+  wrap.append(head, h("div", "sheet-sub", [chart.key, chart.form].filter(Boolean).join(" · ")));
 
-  // Lay bars out 4 per row like iReal: a section letter starts a new row, and a
+  // Lay bars out 4 per row: a section letter starts a new row, and a
   // 2nd ending starts a new row indented under the 1st ending.
   const rows = [];
   let row = [];
@@ -113,9 +113,9 @@ function renderIrealChart(chart) {
   }
   if (row.length) rows.push(row);
 
-  const grid = h("div", "ireal-grid");
+  const grid = h("div", "sheet-grid");
   for (const r of rows) {
-    const rowEl = h("div", "ireal-row");
+    const rowEl = h("div", "sheet-row");
     if (r.some((b) => b && b.l)) rowEl.classList.add("has-label");
     for (let i = 0; i < 4; i++) {
       const b = r[i];
@@ -148,7 +148,7 @@ function renderIrealChart(chart) {
         if (b.r === "%2") rp.append(h("sup", null, "2"));
         body.append(rp);
       } else {
-        for (const c of b.c || []) body.append(irealChord(c));
+        for (const c of b.c || []) body.append(sheetChord(c));
       }
       cell.append(body);
       if (b.m) cell.append(h("span", "cmt", b.m));
@@ -367,7 +367,7 @@ async function send(text) {
 
     pending.className = "msg assistant md";
     pending.innerHTML = renderMarkdown(data.reply); // safe: renderMarkdown escapes first
-    for (const chart of data.charts || []) chatEl.appendChild(renderIrealChart(chart));
+    for (const chart of data.charts || []) chatEl.appendChild(renderSheetChart(chart));
     if (data.tools?.length) renderToolTrace(data.tools);
     history.push({ role: "assistant", content: data.reply });
     playStabs();

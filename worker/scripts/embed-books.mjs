@@ -8,7 +8,7 @@
  * - Resumable: vectors already in the output file are skipped, so a crash or Ctrl-C costs nothing.
  * - The token needs the "Workers AI" permission (account-level). It is read from the environment
  *   only: never put it in a file in this repo and never paste it into a chat.
- * - Input and output live in knowledge/ (gitignored: copyrighted text).
+ * - Input and output live in knowledge/ (gitignored).
  *
  * The vector's metadata carries the chunk text (that's what search_theory_books returns to the
  * chat loop) plus the citation fields. Text ≤ ~3.7 KB, well under Vectorize's 10 KiB limit.

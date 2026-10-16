@@ -1,6 +1,6 @@
 # Jaizz Chat
 
-An AI chat for jazz musicians: players, records, history, theory, and chord changes. It answers well-known questions directly, looks things up when it isn't sure, spells chords in code, and shows chord charts in iReal Pro's layout.
+An AI chat for jazz musicians: players, records, history, theory, and chord changes. It answers well-known questions directly, looks things up when it isn't sure, spells chords in code, and shows jazz charts.
 
 **Live:** https://jamalrizki.github.io/jazz-fact-chat/ · **How it works:** [docs page](https://jamalrizki.github.io/jazz-fact-chat/docs.html)
 
@@ -20,14 +20,14 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
    │       lookup_musician · album_lineup · search_jazz · chord_chart
    │       chord_voicings · random_jazz_fact · search_theory_books (internal only)
    │          Wikipedia · MusicBrainz · Tavily (All About Jazz, Discogs, jazzdisco.org)
-   │          chord library · chord-spelling code · Workers AI + Vectorize (book passages)
+   │          chord library · chord-spelling code · Workers AI + Vectorize (reference material)
    └──► LLM: Groq (openai/gpt-oss-120b) → fallback OpenRouter free models
 ```
 
 - **The model never runs anything.** It returns `tool_calls`; the Worker runs them through MCP and sends the results back until the model answers (at most 4 tool rounds).
 - **Tools are defined once** (`worker/src/tools.js`, MCP-native `inputSchema`). The same definitions serve outside MCP clients at `/mcp` and the app's own chat loop. `mcp-client.js` converts them to the OpenAI function format the LLM providers expect.
-- **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 book searches per question), choosing book passages, parsing rate-limit waits, and stripping source tags from replies.
-- **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it iReal-style, and the model only adds a sentence or two.
+- **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags from replies.
+- **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two.
 
 ## Tools
 
@@ -39,7 +39,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key |
 | `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord |
 | `random_jazz_fact` | Local JSON | Trivia |
-| `search_theory_books` | Workers AI + Vectorize, reranked | Theory, harmony, improvisation, arranging, practice and history questions (max 2 per question). **Internal only:** the chat uses it, but the public `/mcp` endpoint doesn't list or run it, because the passages are copyrighted book text. |
+| `search_theory_books` | Workers AI + Vectorize, reranked | Theory, harmony, improvisation, arranging, practice and history questions (max 2 per question). Searches scoped reference material. **Internal only:** the chat uses it; the public `/mcp` endpoint doesn't list or run it. |
 
 ## Use the MCP server
 
@@ -54,7 +54,7 @@ curl -s https://jazz-fact-chat.jamalrizki.workers.dev/mcp \
 
 ## Run it locally
 
-**Prerequisites:** Node 20+, Python 3, a free [Groq](https://console.groq.com) API key, and a Cloudflare account logged in with `npx wrangler login`. The book search uses the remote Vectorize index even in local dev (`wrangler dev` has no local Vectorize), so without the index that one tool returns nothing and everything else still works. An [OpenRouter](https://openrouter.ai) key (fallback) and a [Tavily](https://tavily.com) key (web search beyond Wikipedia) are optional.
+**Prerequisites:** Node 20+, Python 3, a free [Groq](https://console.groq.com) API key, and a Cloudflare account logged in with `npx wrangler login`. The reference search uses the remote Vectorize index even in local dev (`wrangler dev` has no local Vectorize), so without the index that one tool returns nothing and everything else still works. An [OpenRouter](https://openrouter.ai) key (fallback) and a [Tavily](https://tavily.com) key (web search beyond Wikipedia) are optional.
 
 All `npm` and `npx wrangler` commands run from the `worker/` folder.
 
@@ -81,25 +81,24 @@ Deploy the Worker first when a change touches both, so the page never calls a Wo
 
 ## Chord library
 
-The repo includes a small sample library (`worker/src/chord-charts.sample.json`, 12 standards). The full library is generated from iReal Pro playlist exports and is **not published** (`worker/src/chord-charts.json` is gitignored and deployed with the Worker).
+The repo includes a small sample library (`worker/src/chord-charts.sample.json`, 12 standards). The full library of jazz charts is **not published** (`worker/src/chord-charts.json` is gitignored and deployed with the Worker).
 
 **Warning:** a plain import **replaces** the whole library. Back up `worker/src/chord-charts.json` first, and use `--merge` to add charts to an existing library. From `worker/`:
 
 ```bash
-npm run import -- --merge path/to/ireal-export.html   # add to the library (existing charts win on a clash)
-npm run import -- path/to/ireal-export.html           # replace the library
-npm run import -- --only "Jazz 1410" path/to/export.html   # one playlist only
+npm run import -- --merge path/to/export.html   # add to the library (existing charts win on a clash)
+npm run import -- path/to/export.html           # replace the library
 ```
 
-## Theory-book search (RAG)
+## Reference search (RAG)
 
-`search_theory_books` searches eleven jazz theory, harmony, arranging and history books. The books and their text are private and never in the repo (`Jazz books/` and `knowledge/` are gitignored).
+`search_theory_books` searches scoped reference material on jazz theory, harmony, arranging and history. The material is not in the repo (`knowledge/` is gitignored).
 
-How a search works (`worker/src/books.js`): Workers AI embeds the question (`bge-small-en-v1.5`, 384 dims) → Vectorize returns 30 candidates → `bge-reranker-base` re-scores them → passages scoring at least 0.5 are kept, near-duplicates dropped, and the best 3 go to the model. If none pass, the tool says nothing was found and the model says so. Answers never name or quote the books.
+How a search works (`worker/src/books.js`): Workers AI embeds the question (`bge-small-en-v1.5`, 384 dims) → Vectorize returns 30 candidates → `bge-reranker-base` re-scores them → passages scoring at least 0.5 are kept, near-duplicates dropped, and the best 3 go to the model. If none pass, the tool says nothing was found and the model says so. Answers explain the material in the chat's own words.
 
-Building the index (only needed once, or after adding books):
+Building the index (only needed once, or after adding material):
 
-1. From the repo root: `bash rag/ocr_books.sh` (needs poppler and tesseract), then `python3 rag/ingest_books.py`. Book list: `rag/books.json`.
+1. From the repo root: `bash rag/ocr_books.sh` (needs poppler and tesseract), then `python3 rag/ingest_books.py`. Source list: `rag/books.json`.
 2. From `worker/`: `CLOUDFLARE_ACCOUNT_ID=<your account id> CLOUDFLARE_API_TOKEN=$(npx wrangler auth token) node scripts/embed-books.mjs` (never print or paste the token). The script resumes where it stopped.
 3. From `worker/`: `npx wrangler vectorize insert jazz-books --file=../knowledge/vectors.ndjson` (insert skips ids already in the index; use `upsert` to re-embed).
 
@@ -116,15 +115,15 @@ worker/src/mcp.js                hand-written MCP server (JSON-RPC 2.0); hides i
 worker/src/mcp-client.js         in-process MCP client + MCP → OpenAI tool conversion
 worker/src/tools.js              tool definitions and implementations
 worker/src/voicings.js           chord-symbol grammar and note spelling (chord_voicings)
-worker/src/books.js              book search: embed, vector search, rerank, pick passages
+worker/src/books.js              reference search: embed, vector search, rerank, pick passages
 worker/src/retry-wait.js         reads Groq's "try again in …" waits (435ms, 11.2s, 1m5.2s)
-worker/scripts/import-ireal.mjs  iReal Pro export → chord library
-worker/scripts/embed-books.mjs   book chunks → vectors (Workers AI)
+worker/scripts/import-charts.mjs chart export → chord library
+worker/scripts/embed-books.mjs   reference chunks → vectors (Workers AI)
 worker/test/voicings.test.js     chord-spelling tests
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
-rag/                             OCR and chunking for the books
+rag/                             text extraction and chunking for the reference material
 ```
 
 ## Credits
 
-Data from [Wikipedia](https://www.wikipedia.org), [MusicBrainz](https://musicbrainz.org), [All About Jazz](https://www.allaboutjazz.com), [Discogs](https://www.discogs.com), and the [Jazz Discography Project](https://www.jazzdisco.org). Embeddings and reranking by Cloudflare Workers AI (BAAI bge models). The iReal Pro decoding follows [ireal-reader](https://github.com/pianosnake/ireal-reader) (MIT) and ironss/accompaniser.
+Data from [Wikipedia](https://www.wikipedia.org), [MusicBrainz](https://musicbrainz.org), [All About Jazz](https://www.allaboutjazz.com), [Discogs](https://www.discogs.com), and the [Jazz Discography Project](https://www.jazzdisco.org). Embeddings and reranking by Cloudflare Workers AI (BAAI bge models).

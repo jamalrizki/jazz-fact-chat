@@ -60,7 +60,7 @@ for b in json.load(open(sys.argv[1])):
 PY
 
 while IFS=$'\t' read -r id file source; do
-  pdf="$ROOT/Jazz books/$file"
+  pdf="$ROOT/reference/$file"
   out="$ROOT/knowledge/ocr/$id"; mkdir -p "$out"
   [ -n "${FORCE:-}" ] && [ ! -e "$out/.force-start" ] && touch "$out/.force-start"
   pages=$(pdfinfo "$pdf" 2>/dev/null | awk '/^Pages:/{print $2}')

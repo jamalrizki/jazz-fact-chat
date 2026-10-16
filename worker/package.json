@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy",
     "pretest": "node scripts/ensure-charts.mjs",
     "test": "node --test test/*.test.js",
-    "import": "node scripts/import-ireal.mjs",
+    "import": "node scripts/import-charts.mjs",
     "tail": "wrangler tail"
   },
   "devDependencies": {

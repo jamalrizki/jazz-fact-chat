@@ -113,7 +113,7 @@ export const TOOLS = [
     description:
       "Return the chord changes for a tune from the chord library (jazz standards, plus Brazilian, Latin, blues, country and pop songs), optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
-      "The result includes chart_text (plain text) and layout (the chart as written, iReal-style). " +
+      "The result includes chart_text (plain text) and layout (the chart as written). " +
       "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead.",
     inputSchema: {
       type: "object",
@@ -148,21 +148,21 @@ export const TOOLS = [
       required: ["chord"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true, openWorldHint: false }, // pure computation, no network, no book text
+    annotations: { readOnlyHint: true, openWorldHint: false }, // pure computation, no network, no reference text
     handler: chordVoicings,
   },
   {
     name: "search_theory_books",
-    title: "Search the jazz-theory books",
+    title: "Search the reference material",
     description:
-      "Search a library of eleven jazz reference books (harmony, chord-scale theory, improvisation, voicings, arranging, " +
+      "Search scoped jazz reference material (harmony, chord-scale theory, improvisation, voicings, arranging, " +
       "jazz history, and how players learn and practice) and return the most relevant passages. " +
       "Use it first for conceptual and how-to questions about jazz theory, harmony, improvisation technique, voicings, " +
       "arranging, practice, and jazz history or style, e.g. \"what is a tritone substitution\" or \"how do I voice a rootless chord\". " +
       "Write the query as a descriptive phrase or full question, using the standard jazz terms a textbook would use; it matches by meaning, not exact words. " +
       "Do NOT use it for facts about a specific person, album or session (use lookup_musician, album_lineup or search_jazz) " +
       "or for chord charts. The passages are background for you: explain them in your own words, never copy phrasing, " +
-      "and do not name or cite the books. If nothing relevant comes back, say so.",
+      "and do not name or cite the sources. If nothing relevant comes back, say so.",
     inputSchema: {
       type: "object",
       properties: {
@@ -172,7 +172,7 @@ export const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false }, // our own index only
-    // The passages are copyrighted book text. Only the chat loop (an in-process MCP host) may call this;
+    // Reference passages stay internal. Only the chat loop (an in-process MCP host) may call this;
     // the public /mcp endpoint neither lists nor runs it. See mcp.js.
     internalOnly: true,
     maxResultChars: 8000, // three passages of up to ~2,200 characters, plus JSON overhead
@@ -628,7 +628,7 @@ async function chordChart({ tune, key }) {
 
   return {
     found: true,
-    source: chart.source || "curated chord library",
+    source: "curated chord library",
     title: chart.title,
     composer: chart.composer,
     key: keyLabel,

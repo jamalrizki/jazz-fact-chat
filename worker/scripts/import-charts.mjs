@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Import iReal Pro exports into the chord_chart library.
+ * Import chart exports into the chord_chart library.
  *
  *   npm run import -- ../../my-playlist.html [more files...]
  *   npm run import -- --only jazz ../../main-playlists.html   (only playlists whose name contains "jazz")
  *   npm run import -- --merge ../../more-charts.html          (add to the existing library instead of replacing it;
  *                                                                on a title/alias collision the existing chart wins)
  *
- * Reads iReal Pro "irealb://" exports (the HTML file or a text file holding the
+ * Reads "irealb://" chart exports (the HTML file or a text file holding the
  * link), converts every song to the app's chart format, and writes
  * src/chord-charts.json = imported charts + any hand-curated sample charts whose
  * titles weren't imported. That output file is gitignored on purpose: the full
@@ -49,7 +49,7 @@ function unscramble(s) {
 
 export function decodeExport(text, only = null) {
   const links = [...text.matchAll(/irealb:\/\/([^"'\s<>]+)/g)].map((m) => decodeURIComponent(m[1]));
-  if (links.length === 0) throw new Error("No irealb:// link found. Export in iReal Pro format (HTML), not PDF or MusicXML.");
+  if (links.length === 0) throw new Error("No irealb:// link found. Export the playlist as HTML, not PDF or MusicXML.");
   const songs = [];
   for (const link of links) {
     const parts = link.split("===");
@@ -74,9 +74,9 @@ export function decodeExport(text, only = null) {
   return songs;
 }
 
-/* ---------- 2. iReal chord symbols → standard symbols ---------- */
+/* ---------- 2. export chord symbols → standard symbols ---------- */
 
-// iReal qualities, longest first so the tokenizer matches greedily but safely.
+// Export qualities, longest first so the tokenizer matches greedily but safely.
 const QUALITIES = [
   "7b9#11", "7b9b13", "7#9#11", "7#9b5", "7#9#5", "7b9b5", "7b9#5", "7b9#9", "7b9sus", "7susadd3", "7b13sus",
   "-^7", "-^9", "^7#11", "^9#11", "^7#5", "13#11", "13#9", "13b9", "13sus", "9#11", "9b5", "9#5", "9sus",
@@ -225,7 +225,7 @@ export function parseMusic(music) {
   return { sections, notes: [...notes], time };
 }
 
-/* ---------- 3b. music string → the chart AS WRITTEN (iReal layout) ----------
+/* ---------- 3b. music string → the chart AS WRITTEN (chart layout) ----------
  * One entry per written bar, in reading order, with compact keys:
  *   c: chords            o/e: opening/closing barline ("|", "[", "]", "{", "}", "Z")
  *   l: section letter    n: ending number      t: time signature
@@ -329,7 +329,7 @@ function fixTitle(t) {
 function fixComposer(c) {
   if (!c) return "unknown";
   const parts = c.trim().split(/\s+/);
-  return parts.length === 2 ? `${parts[1]} ${parts[0]}` : c.trim(); // iReal stores "Last First"
+  return parts.length === 2 ? `${parts[1]} ${parts[0]}` : c.trim(); // the export stores "Last First"
 }
 
 export function toEntry(song) {
@@ -354,7 +354,7 @@ export function toEntry(song) {
     sections,
     written: parseWritten(song.music),
     style: song.style || undefined,
-    source: "iReal Pro",
+    source: "curated chord library",
   };
   if (notes.length) entry.notes = notes;
   return entry;
@@ -376,7 +376,7 @@ function main(args) {
     else files.push(args[i]);
   }
   if (!files.length) {
-    console.error("Usage: npm run import -- [--only <playlist name>] [--merge] <ireal-export.html> [more files...]");
+    console.error("Usage: npm run import -- [--only <playlist name>] [--merge] <export.html> [more files...]");
     process.exit(1);
   }
   const imported = [];
@@ -393,7 +393,7 @@ function main(args) {
   const seen = new Set(base.flatMap((e) => [e.title, ...(e.aliases || [])]).map(normalize));
   const unique = imported.filter((e) => !seen.has(normalize(e.title)) && seen.add(normalize(e.title)));
 
-  // Keep hand-curated sample charts only for titles iReal didn't supply.
+  // Keep hand-curated sample charts only for titles the export didn't supply.
   const sample = existsSync(SAMPLE) ? JSON.parse(readFileSync(SAMPLE, "utf8")) : [];
   const extras = sample.filter((c) => !seen.has(normalize(c.title)));
   if (!unique.length) {

@@ -41,7 +41,7 @@ const LEAKED_TOOL_MARKUP = /<\/?[\w-]*(function_call|tool_call|invoke|parameter)
 // "(Source: MusicBrainz)" or "(per Wikipedia)". Remove those in code.
 // "per / via / according to" only count when a known source follows, so
 // "(per bar)" or "(via the ii–V)" survive.
-const SOURCE_NAMES = "wikipedia|musicbrainz|all ?about ?jazz|aaj|discogs|jazzdisco|tavily|ireal|[a-z]+_[a-z_]+";
+const SOURCE_NAMES = "wikipedia|musicbrainz|all ?about ?jazz|aaj|discogs|jazzdisco|tavily|[a-z]+_[a-z_]+";
 const SOURCE_TAG = new RegExp(
   `[ \\t]*\\((?:sources?\\s*:\\s*[^()\\n]{1,60}|(?:per|via|according to)\\s+(?:the\\s+)?(?:${SOURCE_NAMES})\\b[^()\\n]{0,40})\\)`,
   "gi",

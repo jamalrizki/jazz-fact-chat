@@ -13,7 +13,7 @@
  * (worker/scripts/embed-books.mjs) and at query time (here). Vectors from two
  * different models live in different "spaces" and can't be compared.
  *
- * The raw chunk text is copyrighted book material, so it only ever travels
+ * The raw chunk text stays internal: it only ever travels
  * Vectorize → this function → the chat loop → the model. It is never returned
  * by the public /mcp endpoint (see internalOnly in tools.js) or shown in the
  * tool trace (see index.js).
@@ -34,7 +34,7 @@ const MIN_SCORE = 0.5;         // coarse floor on embedding similarity. It only 
 const RERANK_MIN = 0.5;        // reranker scores run 0 to 1. On Oct 11 real data, on-topic passages scored 0.69-0.97 and off-topic ones 0.00-0.44.
 const MAX_PASSAGE_CHARS = 2200;
 
-/** "ligon-0042" → { book: "ligon", n: 42 } */
+/** "src-0042" → { book: "src", n: 42 } */
 function idParts(id) {
   const m = /^(.*)-(\d+)$/.exec(String(id));
   return m ? { book: m[1], n: Number(m[2]) } : { book: String(id), n: -1 };
