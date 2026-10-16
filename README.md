@@ -34,7 +34,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | Tool | Source | Used for |
 |---|---|---|
 | `lookup_musician` | Wikipedia | Quick bios |
-| `album_lineup` | MusicBrainz | Personnel and release year of one album |
+| `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players) |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
 | `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key |
 | `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord |
@@ -65,7 +65,7 @@ All `npm` and `npx wrangler` commands run from the `worker/` folder.
 
 Port 8000 or 8787 already taken? `lsof -nP -iTCP:8000 -iTCP:8787 -sTCP:LISTEN` shows what's holding it.
 
-**Tests** (from `worker/`): `node --test test/voicings.test.js`
+**Tests** (from `worker/`): `npm test` (copies in the sample chord library first if the full one isn't there, so it works on a fresh clone)
 
 **Logs from the deployed Worker** (from `worker/`): `npx wrangler tail`
 
@@ -121,6 +121,7 @@ worker/src/retry-wait.js         reads Groq's "try again in …" waits (435ms, 1
 worker/scripts/import-ireal.mjs  iReal Pro export → chord library
 worker/scripts/embed-books.mjs   book chunks → vectors (Workers AI)
 worker/test/voicings.test.js     chord-spelling tests
+worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 rag/                             OCR and chunking for the books
 ```
 
