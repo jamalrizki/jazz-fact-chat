@@ -490,6 +490,18 @@ const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#",
 const SHARP_MAJOR_KEYS = new Set(["G", "D", "A", "E", "B", "F#", "C#"]);
 const SHARP_MINOR_KEYS = new Set(["E", "B", "F#", "C#", "G#", "D#", "A#"]);
 
+// Keys nobody writes charts in get their everyday enharmonic spelling, so every chord in
+// the chart uses one consistent set of sharps or flats (C# major had "Fm7 A#7" side by side;
+// Cb major had a "B major" header over flat chords). F#/Gb major and G#/Ab minor are both
+// common, so those stay as asked. Same set of keys iReal Pro offers.
+const PRACTICAL_MAJOR = { "C#": "Db", "D#": "Eb", "G#": "Ab", "A#": "Bb", Cb: "B", Fb: "E", "E#": "F", "B#": "C" };
+const PRACTICAL_MINOR = { Db: "C#", Gb: "F#", Cb: "B", Fb: "E", "E#": "F", "B#": "C", "A#": "Bb", "D#": "Eb" };
+
+function practicalKey(name, mode) {
+  const spelled = (mode === "minor" ? PRACTICAL_MINOR : PRACTICAL_MAJOR)[name] || name;
+  return { pc: noteToPc(spelled[0], spelled[1] || ""), name: spelled };
+}
+
 function noteToPc(letter, accidental) {
   return (PITCH[letter] + (accidental === "#" ? 1 : accidental === "b" ? -1 : 0) + 12) % 12;
 }
@@ -564,22 +576,29 @@ async function chordChart({ tune, key }) {
   if (!chart) {
     return {
       found: false,
-      message: `"${tune}" isn't in the chord-chart library (${CHARTS.length} tunes). Tell the user that, and mention any close matches in "suggestions". Do not write a chart for it from memory.`,
+      message: `That tune isn't in the chord-chart library (${CHARTS.length} tunes). Tell the user that, and mention any close matches in "suggestions". Do not write a chart for it from memory.`,
       suggestions: suggestCharts(tune),
     };
   }
 
   const original = parseKey(chart.key);
   let target = original;
+  let keyNote = null;
   if (key !== undefined && key !== null && key !== "") {
-    target = parseKey(requireString(key, "key", 20));
-    if (!target) throw new Error(`"${key}" is not a key I understand. Use a note name like F, Bb, or F#.`);
+    const asked = parseKey(requireString(key, "key", 20));
+    // Never echo the caller's text in an error: it's untrusted model output.
+    if (!asked) throw new Error("That is not a key I understand. Use a note name like F, Bb, or F#.");
+    target = practicalKey(asked.name, chart.mode);
+    if (target.name !== asked.name && target.pc !== original.pc) {
+      // asked.name is rebuilt from the whitelist (letter + # or b), so it is safe to repeat.
+      keyNote = `Asked for ${asked.name} ${chart.mode}; written in ${target.name} ${chart.mode}, the same pitch in its usual spelling.`;
+    }
   }
   const semis = (target.pc - original.pc + 12) % 12;
   const sharpSet = chart.mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
   const useSharps = sharpSet.has(target.name);
   const names = useSharps ? SHARP_NAMES : FLAT_NAMES;
-  const keyName = semis === 0 ? chart.key : names[target.pc];
+  const keyName = semis === 0 ? chart.key : target.name;
 
   const tx = (c) => (semis === 0 ? c : transposeChord(c, semis, names));
   const sections = chart.sections.map((sec) => ({
@@ -607,6 +626,7 @@ async function chordChart({ tune, key }) {
     composer: chart.composer,
     key: keyLabel,
     transposed: semis !== 0,
+    ...(keyNote ? { key_note: keyNote } : {}),
     form: chart.form,
     bars: totalBars,
     chart_text: lines.join("\n"),

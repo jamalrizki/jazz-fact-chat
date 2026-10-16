@@ -223,6 +223,7 @@ async function runConversation(messages, env) {
         charts.push({ title: sc.title, composer: sc.composer, key: sc.key, form: sc.form, style: sc.layout.style, bars: sc.layout.bars });
         toModel = JSON.stringify({
           found: true, title: sc.title, composer: sc.composer, key: sc.key, form: sc.form, bars: sc.bars,
+          ...(sc.key_note ? { key_note: sc.key_note } : {}),
           note: "The full chart is displayed to the user automatically. Do not write out the chords.",
         });
       }

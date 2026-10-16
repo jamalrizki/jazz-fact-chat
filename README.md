@@ -27,7 +27,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 - **The model never runs anything.** It returns `tool_calls`; the Worker runs them through MCP and sends the results back until the model answers (at most 4 tool rounds).
 - **Tools are defined once** (`worker/src/tools.js`, MCP-native `inputSchema`). The same definitions serve outside MCP clients at `/mcp` and the app's own chat loop. `mcp-client.js` converts them to the OpenAI function format the LLM providers expect.
 - **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 book searches per question), choosing book passages, parsing rate-limit waits, and stripping source tags from replies.
-- **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it iReal-style, and the model only adds a sentence or two.
+- **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code (awkward keys get their usual spelling: C# major comes back in Db, Gb minor in F# minor). The page renders it iReal-style, and the model only adds a sentence or two.
 
 ## Tools
 
@@ -120,6 +120,7 @@ worker/src/books.js              book search: embed, vector search, rerank, pick
 worker/src/retry-wait.js         reads Groq's "try again in …" waits (435ms, 11.2s, 1m5.2s)
 worker/scripts/import-ireal.mjs  iReal Pro export → chord library
 worker/scripts/embed-books.mjs   book chunks → vectors (Workers AI)
+worker/test/chord-chart.test.js  transposition, key spelling, title matching
 worker/test/voicings.test.js     chord-spelling tests
 rag/                             OCR and chunking for the books
 ```
