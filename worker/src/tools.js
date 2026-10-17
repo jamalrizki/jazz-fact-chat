@@ -322,7 +322,7 @@ async function albumLineup({ album, artist }) {
     note:
       best.personnel.length === 0
         ? "MusicBrainz lists this album but has no personnel credits for it. Tell the user that; do not fill in names from memory."
-        : undefined,
+        : "Give each person's roles in the words listed here; don't rename, reword or add roles.",
   };
 }
 
@@ -461,6 +461,21 @@ async function searchJazz({ query }, env = {}) {
   };
 }
 
+// MusicBrainz credit attributes mix the role ("tenor saxophone", "spoken vocals") with
+// qualifiers about the credit ("guest", "additional"). Keep only the role, exactly as
+// MusicBrainz words it, so the model can copy it instead of paraphrasing a vague one.
+// (Before this, every vocal credit became plain "vocals", and a live answer once turned
+// that into "spoken word".)
+const CREDIT_QUALIFIERS = new Set(["guest", "additional", "solo", "assistant", "associate", "co", "executive", "sub"]);
+
+/** Role names from a MusicBrainz credit's attributes; `fallback` when none name a role. Exported for tests. */
+export function creditRoles(attributes, fallback) {
+  const roles = (Array.isArray(attributes) ? attributes : [])
+    .filter((a) => typeof a === "string" && a.trim() && !CREDIT_QUALIFIERS.has(a.trim().toLowerCase()))
+    .map((a) => a.trim());
+  return roles.length ? roles : [fallback];
+}
+
 function parseRelease(r) {
   const leader = (r["artist-credit"] || []).map((c) => c.name + (c.joinphrase || "")).join("").trim();
 
@@ -474,8 +489,8 @@ function parseRelease(r) {
   for (const rel of relations) {
     if (rel["target-type"] !== "artist" || !rel.artist?.name) continue;
     let roles;
-    if (rel.type === "instrument") roles = rel.attributes?.length ? rel.attributes : ["instrument"];
-    else if (rel.type === "vocal") roles = ["vocals"];
+    if (rel.type === "instrument") roles = creditRoles(rel.attributes, "instrument");
+    else if (rel.type === "vocal") roles = creditRoles(rel.attributes, "vocals");
     else if (["performer", "conductor", "producer"].includes(rel.type)) roles = [rel.type];
     else continue; // skip engineers, mastering, artwork, etc.
     const set = byPerson.get(rel.artist.name) || new Set();

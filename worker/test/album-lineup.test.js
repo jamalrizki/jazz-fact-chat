@@ -3,7 +3,7 @@
 // Run from worker/:  npm test
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runTool, pickPressings } from "../src/tools.js";
+import { runTool, pickPressings, creditRoles } from "../src/tools.js";
 
 const GROUP = "rg-love-supreme";
 const rel = (id, extra = {}) => ({ id, score: 100, title: "A Love Supreme", status: "Official", "release-group": { id: GROUP }, ...extra });
@@ -119,4 +119,44 @@ test("no match and bad arguments", async () => {
   const long = await runTool("album_lineup", { album: "x".repeat(151) });
   assert.equal(long.isError, true);
   assert.ok(!long.result.error.includes("xxxx")); // caller text is not echoed
+});
+
+// ---- role wording: roles come from MusicBrainz verbatim, so the model can copy them ----
+
+const vocal = (name, attributes) => ({ "target-type": "artist", type: "vocal", attributes, artist: { name } });
+
+test("creditRoles: keeps MusicBrainz role words, drops credit qualifiers", () => {
+  assert.deepEqual(creditRoles(["spoken vocals"], "vocals"), ["spoken vocals"]);
+  assert.deepEqual(creditRoles(["guest", "lead vocals"], "vocals"), ["lead vocals"]);
+  assert.deepEqual(creditRoles(["additional", "trumpet"], "instrument"), ["trumpet"]);
+  assert.deepEqual(creditRoles(["Guest"], "vocals"), ["vocals"]); // qualifier only -> fallback
+  assert.deepEqual(creditRoles([], "vocals"), ["vocals"]);
+  assert.deepEqual(creditRoles(undefined, "instrument"), ["instrument"]);
+  assert.deepEqual(creditRoles([42, null, "  piano "], "instrument"), ["piano"]); // junk ignored, trimmed
+});
+
+test("vocal credits keep their kind (spoken, lead) instead of collapsing to 'vocals'", async () => {
+  stubFetch([rel("lp-1965", { date: "1965" })], {
+    "lp-1965": fullRelease("lp-1965", [
+      ...QUARTET,
+      vocal("John Coltrane", ["spoken vocals"]),
+      vocal("Guest Singer", ["guest", "lead vocals"]),
+      vocal("Plain Singer", []),
+      credit("Elvin Jones", "gong"), // second instrument for the same player merges
+    ]),
+  });
+  const { result } = await runTool("album_lineup", { album: "A Love Supreme" });
+  const roles = Object.fromEntries(result.personnel.map((p) => [p.name, p.roles]));
+  assert.deepEqual(roles["John Coltrane"], ["spoken vocals"]);
+  assert.deepEqual(roles["Guest Singer"], ["lead vocals"]);
+  assert.deepEqual(roles["Plain Singer"], ["vocals"]);
+  assert.deepEqual(roles["Elvin Jones"], ["drums", "gong"]);
+  assert.match(result.note, /roles in the words listed here/); // tells the model to copy, not paraphrase
+});
+
+test("no-credits note still wins when personnel is empty", async () => {
+  stubFetch([rel("lp-1965", { date: "1965" })], { "lp-1965": fullRelease("lp-1965", []) });
+  const { result } = await runTool("album_lineup", { album: "A Love Supreme" });
+  assert.equal(result.personnel.length, 0);
+  assert.match(result.note, /no personnel credits/);
 });

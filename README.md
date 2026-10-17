@@ -34,7 +34,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | Tool | Source | Used for |
 |---|---|---|
 | `lookup_musician` | Wikipedia | Quick bios |
-| `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players) |
+| `album_lineup` | MusicBrainz | Personnel (roles in MusicBrainz's words) and release year of one album (original pressing, not deluxe/expanded reissues with bonus players) |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
 | `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key |
 | `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord |
@@ -121,7 +121,7 @@ worker/src/retry-wait.js         reads Groq's "try again in …" waits (435ms, 1
 worker/scripts/import-charts.mjs chart export → chord library
 worker/scripts/embed-books.mjs   reference chunks → vectors (Workers AI)
 worker/test/voicings.test.js     chord-spelling tests
-worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
+worker/test/album-lineup.test.js original-pressing choice and role wording (MusicBrainz stubbed, offline)
 rag/                             text extraction and chunking for the reference material
 ```
 

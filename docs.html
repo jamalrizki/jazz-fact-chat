@@ -125,7 +125,7 @@
         In practice:
       </p>
       <ul>
-        <li><strong>"Who played on <em>A Love Supreme</em>?"</strong> → <code>album_lineup</code>. Any question about personnel or release year. The description says never to answer these from memory. Code picks the original pressing over deluxe or expanded reissues, whose bonus tracks credit players who weren't on the album.</li>
+        <li><strong>"Who played on <em>A Love Supreme</em>?"</strong> → <code>album_lineup</code>. Any question about personnel or release year. The description says never to answer these from memory. Code picks the original pressing over deluxe or expanded reissues, whose bonus tracks credit players who weren't on the album. Roles are passed on in MusicBrainz's own words ("spoken vocals", "tenor saxophone"), and the model is told to repeat them as written.</li>
         <li><strong>"Who was Mary Lou Williams?"</strong> → <code>lookup_musician</code>. Biography, dates, instruments, career.</li>
         <li><strong>"How many albums did Miles Davis make with John Coltrane?"</strong> → <code>search_jazz</code>. The general fallback: it searches Wikipedia (plus All About Jazz, Discogs and the Jazz Discography Project) and returns only the passages relevant to the question. The model uses it whenever it isn't sure, and whenever another tool comes back empty.</li>
         <li><strong>"Chart for My Funny Valentine in F."</strong> → <code>chord_chart</code>. See <a href="#charts">Chord charts</a>.</li>
