@@ -107,7 +107,8 @@ For local debugging, `DEBUG_BOOKS=1` in `worker/.dev.vars` prints which passages
 ## Project layout
 
 ```
-index.html, app.js, style.css    chat page (lounge theme, chord-chart renderer)
+index.html, app.js, style.css    chat page (lounge theme, chord-chart renderer, chart menu, setlist)
+charts.js                        chart row layout (shared) and PDF export (jsPDF, loaded on demand)
 docs.html, docs.js               "How it works" page (tool list loaded live via tools/list)
 config.js                        Worker URL (local vs deployed)
 worker/src/index.js              chat endpoint, system prompt, tool-use loop, provider fallback, source-tag filter

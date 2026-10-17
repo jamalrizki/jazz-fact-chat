@@ -65,21 +65,13 @@ const h = (tag, cls, text) => {
   return n;
 };
 
-// Chart chord symbols: maj7 → Δ7, m7 → –7, m7b5 → ø7, dim7 → o7, aug → +
-function sheetQuality(q) {
-  const map = [
-    [/^mMaj/, "–Δ"], [/^maj/, "Δ"], [/^m7b5$/, "ø7"], [/^m9b5$/, "ø9"],
-    [/^dim7$/, "o7"], [/^dim$/, "o"], [/^aug$/, "+"], [/^m/, "–"],
-  ];
-  for (const [re, sub] of map) if (re.test(q)) { q = q.replace(re, sub); break; }
-  return q.replace("6/9", "69").replace(/b(\d)/g, "♭$1").replace(/#(\d)/g, "♯$1");
-}
+const sheetQuality = ChartSheet.quality; // maj7 → Δ7, m7 → –7, m7b5 → ø7 … (charts.js)
 
 function sheetChord(sym) {
   const span = h("span", "ch");
-  const m = sym.match(/^([A-G])([b#]?)(.*?)(?:\/([A-G])([b#]?))?$/);
-  if (!m) { span.append(h("span", "rt nc", sym)); return span; }
-  const [, root, acc, q, bass, bassAcc] = m;
+  const p = ChartSheet.parseChord(sym);
+  if (!p) { span.append(h("span", "rt nc", sym)); return span; }
+  const { root, acc, q, bass, bassAcc } = p;
   span.append(h("span", "rt", root));
   if (acc) span.append(h("span", "ac", acc === "b" ? "♭" : "♯"));
   if (q) span.append(h("span", "ql", sheetQuality(q)));
@@ -97,21 +89,8 @@ function renderSheetChart(chart) {
   );
   wrap.append(head, h("div", "sheet-sub", [chart.key, chart.form].filter(Boolean).join(" · ")));
 
-  // Lay bars out 4 per row: a section letter starts a new row, and a
-  // 2nd ending starts a new row indented under the 1st ending.
-  const rows = [];
-  let row = [];
-  let ending1Col = 0;
-  let inEnding = 0;
-  for (const bar of chart.bars) {
-    if (row.length && (row.length === 4 || bar.l || (bar.n || 0) >= 2)) { rows.push(row); row = []; }
-    if (bar.n === 1) ending1Col = row.length;
-    if ((bar.n || 0) >= 2 && row.length === 0) for (let i = 0; i < ending1Col; i++) row.push(null);
-    if (bar.n) inEnding = bar.n;
-    row.push({ ...bar, inEnding, endingStart: Boolean(bar.n) });
-    if (["}", "]", "Z"].includes(bar.e)) inEnding = 0;
-  }
-  if (row.length) rows.push(row);
+  // Same row layout as the PDF (charts.js): 4 bars a row, sections and 2nd endings start new rows.
+  const rows = ChartSheet.layoutRows(chart.bars);
 
   const grid = h("div", "sheet-grid");
   for (const r of rows) {
@@ -157,8 +136,203 @@ function renderSheetChart(chart) {
     grid.append(rowEl);
   }
   wrap.append(grid);
-  return wrap;
+  return withChartMenu(chart, wrap);
 }
+
+/* ---------- chart menu, setlist and PDFs ----------
+ * Nothing happens when you tap a chart itself: every action is behind its ⋯ menu,
+ * so scrolling on a phone can't set one off. The setlist lives in this browser only.
+ */
+
+const toastEl = document.getElementById("toast");
+let toastTimer;
+function toast(text) {
+  if (!toastEl) return;
+  toastEl.textContent = text;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2600);
+}
+
+const SETLIST_KEY = "jaizz.setlist.v1";
+const chartId = (c) => `${c.title}|${c.key || ""}`;
+
+function loadSetlist() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETLIST_KEY) || "null");
+    if (s && Array.isArray(s.charts)) return { name: String(s.name || ""), charts: s.charts.filter((c) => c && c.title && Array.isArray(c.bars)) };
+  } catch { /* private window or bad data: start empty */ }
+  return { name: "", charts: [] };
+}
+const setlist = loadSetlist();
+function saveSetlist() {
+  try { localStorage.setItem(SETLIST_KEY, JSON.stringify(setlist)); } catch { /* storage full or blocked: keep it in memory */ }
+  updateSetlistButton();
+}
+const inSetlist = (chart) => setlist.charts.some((c) => chartId(c) === chartId(chart));
+
+const setlistBtn = document.getElementById("setlist-btn");
+function updateSetlistButton() {
+  if (!setlistBtn) return;
+  setlistBtn.hidden = setlist.charts.length === 0;
+  setlistBtn.querySelector(".count").textContent = setlist.charts.length;
+}
+
+let openMenu = null; // { close } of the chart menu that's open, if any
+function closeOpenMenu() { if (openMenu) openMenu.close(); }
+document.addEventListener("pointerdown", (e) => { if (openMenu && !openMenu.contains(e.target)) closeOpenMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && openMenu) { const m = openMenu; m.close(); m.button.focus(); } });
+
+async function makePdf(job, busyEl, busyText) {
+  const label = busyEl.textContent;
+  busyEl.disabled = true;
+  busyEl.textContent = busyText;
+  try {
+    await job();
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't make the PDF. Check your connection and try again.");
+  } finally {
+    busyEl.disabled = false;
+    busyEl.textContent = label;
+  }
+}
+
+function withChartMenu(chart, sheetEl) {
+  const outer = h("div", "sheet-wrap");
+  const button = h("button", "sheet-menu-btn", "⋯");
+  button.type = "button";
+  button.setAttribute("aria-label", `Options for ${chart.title}`);
+  button.setAttribute("aria-haspopup", "menu");
+  button.setAttribute("aria-expanded", "false");
+
+  const menu = h("div", "sheet-menu");
+  menu.setAttribute("role", "menu");
+  menu.hidden = true;
+  const pdfItem = h("button", null, "Download PDF");
+  const setItem = h("button");
+  for (const b of [pdfItem, setItem]) { b.type = "button"; b.setAttribute("role", "menuitem"); }
+  menu.append(pdfItem, setItem);
+
+  const state = {
+    button,
+    contains: (node) => outer.contains(node),
+    close() {
+      menu.hidden = true;
+      button.setAttribute("aria-expanded", "false");
+      if (openMenu === state) openMenu = null;
+    },
+  };
+  button.addEventListener("click", () => {
+    if (openMenu === state) { state.close(); return; }
+    closeOpenMenu();
+    setItem.textContent = inSetlist(chart) ? "Remove from setlist" : "Add to setlist";
+    menu.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    openMenu = state;
+    pdfItem.focus();
+  });
+  pdfItem.addEventListener("click", async () => {
+    await makePdf(() => ChartSheet.downloadChart(chart), pdfItem, "Making PDF…");
+    state.close();
+  });
+  setItem.addEventListener("click", () => {
+    if (inSetlist(chart)) {
+      setlist.charts = setlist.charts.filter((c) => chartId(c) !== chartId(chart));
+      toast(`Removed ${chart.title} from the setlist`);
+    } else {
+      setlist.charts.push(chart);
+      toast(`Added ${chart.title} · ${setlist.charts.length} in the setlist`);
+    }
+    saveSetlist();
+    renderSetlist();
+    state.close();
+  });
+
+  outer.append(button, menu, sheetEl);
+  return outer;
+}
+
+/* the setlist panel */
+
+const setlistDialog = document.getElementById("setlist");
+const setlistItems = document.getElementById("setlist-items");
+const setlistEmpty = document.getElementById("setlist-empty");
+const setlistName = document.getElementById("setlist-name");
+const setlistDownload = document.getElementById("setlist-download");
+const setlistClear = document.getElementById("setlist-clear");
+
+function moveInSetlist(i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= setlist.charts.length) return;
+  [setlist.charts[i], setlist.charts[j]] = [setlist.charts[j], setlist.charts[i]];
+  saveSetlist();
+  renderSetlist();
+  setlistItems.children[j]?.querySelector(delta < 0 ? ".sl-up" : ".sl-down")?.focus();
+}
+
+function renderSetlist() {
+  if (!setlistItems) return;
+  setlistItems.replaceChildren();
+  setlist.charts.forEach((c, i) => {
+    const li = h("li");
+    const title = h("span", "sl-title", c.title);
+    title.append(h("span", "sl-key", c.key || ""));
+    const tools = h("span", "sl-tools");
+    const mk = (cls, text, label, fn, disabled) => {
+      const b = h("button", cls, text);
+      b.type = "button";
+      b.setAttribute("aria-label", label);
+      b.disabled = disabled;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    tools.append(
+      mk("sl-up", "↑", `Move ${c.title} up`, () => moveInSetlist(i, -1), i === 0),
+      mk("sl-down", "↓", `Move ${c.title} down`, () => moveInSetlist(i, 1), i === setlist.charts.length - 1),
+      mk("sl-remove", "×", `Remove ${c.title}`, () => { setlist.charts.splice(i, 1); saveSetlist(); renderSetlist(); }, false),
+    );
+    li.append(title, tools);
+    setlistItems.append(li);
+  });
+  const empty = setlist.charts.length === 0;
+  setlistEmpty.hidden = !empty;
+  setlistDownload.disabled = empty;
+  setlistClear.disabled = empty;
+}
+
+if (setlistDialog) {
+  setlistBtn.addEventListener("click", () => {
+    setlistName.value = setlist.name;
+    renderSetlist();
+    setlistDialog.showModal();
+  });
+  setlistDialog.querySelector(".sl-close").addEventListener("click", () => setlistDialog.close());
+  // A tap on the dim backdrop (outside the panel) closes it too.
+  setlistDialog.addEventListener("click", (e) => { if (e.target === setlistDialog) setlistDialog.close(); });
+  setlistName.addEventListener("input", () => { setlist.name = setlistName.value.slice(0, 60); saveSetlist(); });
+  setlistDownload.addEventListener("click", () =>
+    makePdf(() => ChartSheet.downloadSetlist(setlist.name.trim() || "Setlist", setlist.charts), setlistDownload, "Making PDF…"));
+  // Two taps to clear, never a browser confirm() box.
+  let clearArmed = null;
+  setlistClear.addEventListener("click", () => {
+    if (!clearArmed) {
+      setlistClear.textContent = "Tap again to clear";
+      clearArmed = setTimeout(() => { clearArmed = null; setlistClear.textContent = "Clear"; }, 3000);
+      return;
+    }
+    clearTimeout(clearArmed);
+    clearArmed = null;
+    setlistClear.textContent = "Clear";
+    setlist.charts = [];
+    saveSetlist();
+    renderSetlist();
+  });
+  setlistDialog.addEventListener("close", () => {
+    if (clearArmed) { clearTimeout(clearArmed); clearArmed = null; setlistClear.textContent = "Clear"; }
+  });
+}
+updateSetlistButton();
 
 /* ---------- plain-text chord charts (fallback for ```chart blocks) ---------- */
 

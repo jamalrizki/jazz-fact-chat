@@ -39,6 +39,7 @@
 </head>
 <body>
   <header>
+    <button id="setlist-btn" class="setlist-btn" type="button" hidden>Setlist <span class="count">0</span></button>
     <div class="marquee" aria-hidden="true"><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i></div>
     <h1 class="neon" aria-label="Jaizz Chat Lounge"><span class="logo" aria-hidden="true">JAIZZ</span><span class="sub" aria-hidden="true"><span class="buzz">C</span>HAT LOUNGE</span></h1>
     <p class="tagline">Ask about musicians, records, and theory.</p>
@@ -62,7 +63,26 @@
 
   <footer id="status"></footer>
 
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="setlist" class="setlist" aria-labelledby="setlist-title">
+    <div class="sl-head">
+      <h2 id="setlist-title">Setlist</h2>
+      <button type="button" class="sl-close" aria-label="Close">×</button>
+    </div>
+    <label class="sl-name">Name
+      <input id="setlist-name" type="text" maxlength="60" placeholder="Setlist" autocomplete="off">
+    </label>
+    <ol id="setlist-items" class="sl-items"></ol>
+    <p id="setlist-empty" class="sl-empty" hidden>No charts yet. Open a chart's ⋯ menu and choose “Add to setlist”.</p>
+    <div class="sl-actions">
+      <button id="setlist-download" type="button" class="sl-primary">Download setlist PDF</button>
+      <button id="setlist-clear" type="button" class="sl-secondary">Clear</button>
+    </div>
+  </dialog>
+
   <script src="config.js"></script>
+  <script src="charts.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
