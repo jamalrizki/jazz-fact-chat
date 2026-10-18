@@ -40,6 +40,8 @@ const DEGREES = {
 const ORDER = ["1", "2", "b3", "3", "4", "b5", "5", "#5", "6", "bb7", "b7", "7", "b9", "9", "#9", "11", "#11", "b13", "13"];
 const EXTENSION_DEGREES = new Set(["b9", "9", "#9", "11", "#11", "b13", "13"]);
 const INVERSION_NAMES = ["root position", "1st inversion", "2nd inversion", "3rd inversion", "4th inversion", "5th inversion"];
+const SHELL_THIRDS = new Set(["3", "b3", "4"]); // sus4 shells use the 4th; sus2 and no-3rd chords get no shell
+const SHELL_SEVENTHS = new Set(["7", "b7", "bb7", "6"]); // 6th chords use the 6th in place of the 7th
 
 const mod = (n, m) => ((n % m) + m) % m;
 const unreadable = () =>
@@ -209,6 +211,37 @@ function chooseScale(degrees) {
   return [name, list];
 }
 
+/* ---------- voicings (shells, drop-2) ---------- */
+
+/**
+ * Shell and drop-2 voicings, built only from the chord's own tones and listed low to high.
+ *  - Shell: root + 3rd + 7th (the guide tones), as 1-3-7 and 1-7-3. Extensions don't change it.
+ *  - Drop-2: take each close-position inversion of a 4-note chord and drop the 2nd note from the top
+ *    an octave, so it becomes the bass. Only for chords of exactly four notes (Cmaj7, C6, Cm7b5,
+ *    C7b5, Cdim7...): for C9 or C13 that would silently leave tones out.
+ */
+function voicings(tones) {
+  const out = {};
+  const third = tones.find((t) => SHELL_THIRDS.has(t.degree));
+  const seventh = tones.find((t) => SHELL_SEVENTHS.has(t.degree));
+  if (tones[0].degree === "1" && third && seventh) {
+    const root = tones[0];
+    out.shells = [
+      [root, third, seventh],
+      [root, seventh, third],
+    ].map((v) => `${v.map((t) => t.degree).join("-")}: ${prettyList(v.map((t) => t.note))}`);
+  }
+  if (tones.length === 4 && tones.every((t) => !EXTENSION_DEGREES.has(t.degree))) {
+    // Close position, low to high: [a, b, c, d]. Dropping c (2nd from top) gives [c, a, b, d].
+    // Rotation i+2 of the close stack puts tone i in the bass, so the list starts with the root in the bass.
+    out.drop2 = tones.map((_, i) => {
+      const [a, b, c, d] = rotate(tones, (i + 2) % 4);
+      return `${c.degree} in bass: ${prettyList([c, a, b, d].map((t) => t.note))}`;
+    });
+  }
+  return out;
+}
+
 /* ---------- the tool ---------- */
 
 function describe(letter, root, rootPc, quality, bass, { scale = false, checkNotes = [] } = {}) {
@@ -226,6 +259,7 @@ function describe(letter, root, rootPc, quality, bass, { scale = false, checkNot
     inversions: core.map((_, i) => `${INVERSION_NAMES[i]}: ${prettyList(rotate(core, i))}`),
     rootless: prettyList(tones.slice(1).map((t) => t.note)),
   };
+  Object.assign(result, voicings(tones));
 
   if (bass) {
     const t = tones.find((x) => x.note === bass);
@@ -257,6 +291,7 @@ function describe(letter, root, rootPc, quality, bass, { scale = false, checkNot
   // Short on purpose: the whole result is sent to the model on every call.
   result.note =
     "Note names are exact: copy them, add nothing." +
+    (result.shells || result.drop2 ? " Voicings are listed low to high." : "") +
     (scale && chosen ? " The scale is the usual textbook choice; others are possible." : "") +
     (checkNotes.length ? " wrong_spelling: use should_be. outside: not in the chord or its scale." : "");
   return result;

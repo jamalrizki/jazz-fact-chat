@@ -269,3 +269,33 @@ test("MCP: public /mcp lists it, search_theory_books stays hidden, calls work", 
   assert.equal(bad.result.isError, true); // tool failure = result, not a JSON-RPC protocol error
   assert.equal(bad.error, undefined);
 });
+
+test("shells: root, 3rd and 7th (or 6th / sus4) from the chord's own tones", () => {
+  assert.deepEqual(chordVoicings({ chord: "Cmaj7" }).shells, ["1-3-7: C E B", "1-7-3: C B E"]);
+  assert.deepEqual(chordVoicings({ chord: "Dm7" }).shells, ["1-b3-b7: D F C", "1-b7-b3: D C F"]);
+  assert.deepEqual(chordVoicings({ chord: "C6" }).shells, ["1-3-6: C E A", "1-6-3: C A E"]);
+  assert.deepEqual(chordVoicings({ chord: "C7sus4" }).shells, ["1-4-b7: C F B♭", "1-b7-4: C B♭ F"]);
+  assert.deepEqual(chordVoicings({ chord: "Cdim7" }).shells, ["1-b3-bb7: C E♭ B♭♭", "1-bb7-b3: C B♭♭ E♭"]);
+  assert.deepEqual(chordVoicings({ chord: "G13" }).shells, ["1-3-b7: G B F", "1-b7-3: G F B"]); // extensions sit on top of the shell
+  for (const c of ["C", "Cm", "Csus4", "Csus2", "C5", "C7omit3"]) assert.equal(chordVoicings({ chord: c }).shells, undefined, c);
+});
+
+test("drop-2: every bass note of a four-note chord, low to high, root in bass first", () => {
+  assert.deepEqual(chordVoicings({ chord: "Cmaj7" }).drop2, ["1 in bass: C G B E", "3 in bass: E B C G", "5 in bass: G C E B", "7 in bass: B E G C"]);
+  assert.deepEqual(chordVoicings({ chord: "G7" }).drop2, ["1 in bass: G D F B", "3 in bass: B F G D", "5 in bass: D G B F", "b7 in bass: F B D G"]);
+  assert.deepEqual(chordVoicings({ chord: "Bm7b5" }).drop2[0], "1 in bass: B F A D");
+  assert.deepEqual(chordVoicings({ chord: "Ebm(maj7)" }).drop2[0], "1 in bass: E♭ B♭ D G♭");
+  // Each drop-2 voicing uses exactly the chord's four tones, once each.
+  for (const c of ["Amaj7", "F#m7", "Db7", "Gm6", "E7#5", "Abdim7", "C7sus4"]) {
+    const r = chordVoicings({ chord: c });
+    const tones = r.chord_tones.map((t) => t.note).sort().join();
+    for (const v of r.drop2) assert.equal(v.split(": ")[1].replace(/♯/g, "#").replace(/♭/g, "b").split(" ").sort().join(), tones, `${c} ${v}`);
+  }
+  // Not for triads or chords with extensions: a 4-note drop-2 would leave tones out.
+  for (const c of ["C", "C9", "Cmaj9", "C13", "C7alt", "C7b9", "C69", "Cadd9"]) assert.equal(chordVoicings({ chord: c }).drop2, undefined, c);
+});
+
+test("result note says voicings run low to high only when there are voicings", () => {
+  assert.match(chordVoicings({ chord: "Cmaj7" }).note, /low to high/);
+  assert.doesNotMatch(chordVoicings({ chord: "Cm" }).note, /low to high/); // triad: no shell or drop-2
+});

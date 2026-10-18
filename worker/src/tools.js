@@ -134,7 +134,7 @@ export const TOOLS = [
     name: "chord_voicings",
     title: "Chord tones, inversions and chord-scales",
     description:
-      "Spells any chord symbol correctly in code: chord tones, inversions, rootless form. Use for every question about the notes of a chord or which scale fits it. " +
+      "Spells any chord symbol correctly in code: chord tones, inversions, rootless form, shell and drop-2 voicings. Use for every question about the notes of a chord or which scale fits it. " +
       "Takes standard symbols: triads (C, Cm, Cdim, Caug, Csus4), 6ths, 7ths and extensions (Cmaj7, Cm7b5, Cdim7, C9, Cm11, C13), alterations (C7b9, C7#11, C7alt), add and slash chords (Cadd9, C/E). " +
       "A bare root returns labelled examples instead of assuming a quality. scale: true adds the usual chord-scale. " +
       "check_notes verifies notes from elsewhere against the chord and its scale. Copy note names exactly.",
