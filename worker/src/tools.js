@@ -25,6 +25,11 @@ const USER_AGENT = "JazzFactChat/0.3 (+https://github.com/jamalrizki/jazz-fact-c
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_RESULT_CHARS = 5000; // tool results cost tokens on every later model round
 
+// Transposing instruments read their part this many semitones above concert pitch.
+// Bb: a major 2nd, Eb: a major 6th, F (horn): a perfect 5th. Fixed numbers, applied in code.
+const INSTRUMENT_OFFSET = { concert: 0, Bb: 2, Eb: 9, F: 7 };
+const INSTRUMENTS = Object.keys(INSTRUMENT_OFFSET);
+
 /* ---------- definitions ---------- */
 
 export const TOOLS = [
@@ -122,6 +127,11 @@ export const TOOLS = [
         key: {
           type: "string",
           description: "Optional target key, e.g. \"F\", \"Bb\", \"F#\". Omit to use the tune's usual key.",
+        },
+        instrument: {
+          type: "string",
+          enum: INSTRUMENTS,
+          description: "For a horn player: Bb (trumpet, tenor, soprano, clarinet), Eb (alto, bari), F (French horn). Returns their written key; key stays concert.",
         },
       },
       required: ["tune"],
@@ -584,8 +594,13 @@ function suggestCharts(tune) {
   return scored.slice(0, 8).map((x) => x.title);
 }
 
-async function chordChart({ tune, key }) {
+async function chordChart({ tune, key, instrument }) {
   tune = requireString(tune, "tune", 100);
+  // Validate before the lookup, and never echo the caller's text back.
+  if (instrument === undefined || instrument === null || instrument === "") instrument = "concert";
+  if (typeof instrument !== "string" || !Object.hasOwn(INSTRUMENT_OFFSET, instrument)) {
+    throw new Error(`"instrument" must be one of: ${INSTRUMENTS.join(", ")}.`);
+  }
   const chart = findChart(tune);
   if (!chart) {
     return {
@@ -599,10 +614,18 @@ async function chordChart({ tune, key }) {
   let target = original;
   if (key !== undefined && key !== null && key !== "") {
     target = parseKey(requireString(key, "key", 20));
-    if (!target) throw new Error(`"${key}" is not a key I understand. Use a note name like F, Bb, or F#.`);
+    if (!target) throw new Error("That is not a key I understand. Use a note name like F, Bb, or F#.");
+  }
+  const sharpSet = chart.mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
+  // `target` is the concert key. A transposing instrument reads a fixed interval above it;
+  // the written key is named with the same sharp/flat rule the key argument uses.
+  const concertName = target === original ? chart.key : (sharpSet.has(target.name) ? SHARP_NAMES : FLAT_NAMES)[target.pc];
+  const offset = INSTRUMENT_OFFSET[instrument];
+  if (offset) {
+    const pc = (target.pc + offset) % 12;
+    target = { pc, name: sharpSet.has(SHARP_NAMES[pc]) ? SHARP_NAMES[pc] : FLAT_NAMES[pc] };
   }
   const semis = (target.pc - original.pc + 12) % 12;
-  const sharpSet = chart.mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
   const useSharps = sharpSet.has(target.name);
   const names = useSharps ? SHARP_NAMES : FLAT_NAMES;
   const keyName = semis === 0 ? chart.key : names[target.pc];
@@ -633,11 +656,32 @@ async function chordChart({ tune, key }) {
     composer: chart.composer,
     key: keyLabel,
     transposed: semis !== 0,
+    ...(offset ? { instrument, concert_key: `${concertName} ${chart.mode}` } : {}),
     form: chart.form,
     bars: totalBars,
     chart_text: lines.join("\n"),
     layout: { style: chart.style || null, bars: written },
     note: "Common changes as typically played. Published versions and players' reharmonizations vary.",
+  };
+}
+
+/**
+ * A found chord chart is split in two: the full chart for the page, and a short
+ * summary for the model (it never sees the chords, so it can't garble them).
+ * Used by the chat loop in index.js (kept here so tests can import it).
+ */
+export function splitChartResult(sc) {
+  // For a transposing instrument the chart header says so, so nobody reads it as concert.
+  const pageKey = sc.instrument ? `${sc.key}, for ${sc.instrument} instruments` : sc.key;
+  return {
+    page: { title: sc.title, composer: sc.composer, key: pageKey, form: sc.form, style: sc.layout.style, bars: sc.layout.bars },
+    model: {
+      found: true, title: sc.title, composer: sc.composer, key: sc.key,
+      ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),
+      form: sc.form, bars: sc.bars,
+      note: "The full chart is displayed to the user automatically. Do not write out the chords." +
+        (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : ""),
+    },
   };
 }
 

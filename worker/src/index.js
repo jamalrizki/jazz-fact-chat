@@ -23,6 +23,7 @@
 import { connect } from "./mcp-client.js";
 import { handleMcpHttp } from "./mcp.js";
 import { parseRetryWaitSeconds } from "./retry-wait.js";
+import { splitChartResult } from "./tools.js";
 
 const MAX_MESSAGES = 20;
 const MAX_CHARS_PER_MESSAGE = 4000;
@@ -220,11 +221,9 @@ async function runConversation(messages, env) {
       let toModel = outcome.text;
       const sc = outcome.structured;
       if (name === "chord_chart" && sc?.found && sc.layout) {
-        charts.push({ title: sc.title, composer: sc.composer, key: sc.key, form: sc.form, style: sc.layout.style, bars: sc.layout.bars });
-        toModel = JSON.stringify({
-          found: true, title: sc.title, composer: sc.composer, key: sc.key, form: sc.form, bars: sc.bars,
-          note: "The full chart is displayed to the user automatically. Do not write out the chords.",
-        });
+        const split = splitChartResult(sc);
+        charts.push(split.page);
+        toModel = JSON.stringify(split.model);
       }
       convo.push({ role: "tool", tool_call_id: call.id, content: toModel });
       trace.push({
