@@ -36,7 +36,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | `lookup_musician` | Wikipedia | Quick bios |
 | `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players) |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
-| `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key, or written for Bb, Eb or F instruments (`instrument`; `key` stays the concert key) |
+| `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key, or written for Bb, Eb or F instruments (`instrument`; `key` stays the concert key); `scales: true` adds the usual chord-scale for each distinct chord (first 16), spelled by `chord_voicings`' code |
 | `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord |
 | `random_jazz_fact` | Local JSON | Trivia |
 | `search_theory_books` | Workers AI + Vectorize, reranked | Theory, harmony, improvisation, arranging, practice and history questions (max 2 per question). Searches scoped reference material. **Internal only:** the chat uses it; the public `/mcp` endpoint doesn't list or run it. |

@@ -29,6 +29,7 @@ const MAX_RESULT_CHARS = 5000; // tool results cost tokens on every later model 
 // Bb: a major 2nd, Eb: a major 6th, F (horn): a perfect 5th. Fixed numbers, applied in code.
 const INSTRUMENT_OFFSET = { concert: 0, Bb: 2, Eb: 9, F: 7 };
 const INSTRUMENTS = Object.keys(INSTRUMENT_OFFSET);
+const MAX_TUNE_SCALES = 16; // distinct chords per tune that get a scale; keeps the result small
 
 /* ---------- definitions ---------- */
 
@@ -133,6 +134,7 @@ export const TOOLS = [
           enum: INSTRUMENTS,
           description: "For a horn player: Bb (trumpet, tenor, soprano, clarinet), Eb (alto, bari), F (French horn). Returns their written key; key stays concert.",
         },
+        scales: { type: "boolean", description: "true adds the usual scale for each chord, for \"what scales go over this tune\"." },
       },
       required: ["tune"],
       additionalProperties: false,
@@ -594,8 +596,9 @@ function suggestCharts(tune) {
   return scored.slice(0, 8).map((x) => x.title);
 }
 
-async function chordChart({ tune, key, instrument }) {
+async function chordChart({ tune, key, instrument, scales }) {
   tune = requireString(tune, "tune", 100);
+  if (scales !== undefined && scales !== null && typeof scales !== "boolean") throw new Error('"scales" must be true or false.');
   // Validate before the lookup, and never echo the caller's text back.
   if (instrument === undefined || instrument === null || instrument === "") instrument = "concert";
   if (typeof instrument !== "string" || !Object.hasOwn(INSTRUMENT_OFFSET, instrument)) {
@@ -661,7 +664,39 @@ async function chordChart({ tune, key, instrument }) {
     bars: totalBars,
     chart_text: lines.join("\n"),
     layout: { style: chart.style || null, bars: written },
+    ...(scales === true ? tuneScales(sections) : {}),
     note: "Common changes as typically played. Published versions and players' reharmonizations vary.",
+  };
+}
+
+/**
+ * scales: true. One entry per DISTINCT chord, in order of first appearance, in
+ * the chart's (transposed) key. The model would otherwise make one chord_voicings
+ * call per chord or guess; looping in code is one round trip and skips nothing.
+ * Note names come only from chordVoicings (the same code as its scale: true).
+ */
+export function tuneScales(sections) {
+  const distinct = [];
+  for (const sec of sections) {
+    for (const bar of sec.bars) {
+      for (const c of bar.split(" ")) {
+        if (/^[A-G]/.test(c) && !distinct.includes(c)) distinct.push(c);
+      }
+    }
+  }
+  const out = [];
+  for (const chord of distinct.slice(0, MAX_TUNE_SCALES)) {
+    let s = null;
+    try {
+      s = chordVoicings({ chord, scale: true }).scale;
+    } catch {
+      continue; // a symbol the speller can't read is skipped, not guessed
+    }
+    out.push(s ? { chord, scale: `${s.text.split(" ")[0]} ${s.name}`, notes: s.text } : { chord, scale: null });
+  }
+  return {
+    scales: out,
+    ...(distinct.length > MAX_TUNE_SCALES ? { more_chords: distinct.length - MAX_TUNE_SCALES } : {}),
   };
 }
 
@@ -679,8 +714,11 @@ export function splitChartResult(sc) {
       found: true, title: sc.title, composer: sc.composer, key: sc.key,
       ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),
       form: sc.form, bars: sc.bars,
-      note: "The full chart is displayed to the user automatically. Do not write out the chords." +
-        (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : ""),
+      ...(sc.scales ? { scales: sc.scales, ...(sc.more_chords ? { more_chords: sc.more_chords } : {}) } : {}),
+      note: "The full chart is displayed to the user automatically. " +
+        (sc.scales ? "Do not write out the chart's bars." : "Do not write out the chords.") +
+        (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : "") +
+        (sc.scales ? " List each chord with its scale and notes exactly as given in scales (null: no single default); these are textbook defaults, others are possible." : ""),
     },
   };
 }
