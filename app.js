@@ -160,9 +160,12 @@ const chartId = (c) => `${c.title}|${c.key || ""}`;
 function loadSetlist() {
   try {
     const s = JSON.parse(localStorage.getItem(SETLIST_KEY) || "null");
-    if (s && Array.isArray(s.charts)) return { name: String(s.name || ""), charts: s.charts.filter((c) => c && c.title && Array.isArray(c.bars)) };
+    if (s && Array.isArray(s.charts)) {
+      const instrument = [SetlistPrint.SAVED, ...SetlistPrint.INSTRUMENTS].includes(s.instrument) ? s.instrument : SetlistPrint.SAVED;
+      return { name: String(s.name || ""), instrument, charts: s.charts.filter((c) => c && c.title && Array.isArray(c.bars)) };
+    }
   } catch { /* private window or bad data: start empty */ }
-  return { name: "", charts: [] };
+  return { name: "", instrument: SetlistPrint.SAVED, charts: [] };
 }
 const setlist = loadSetlist();
 function saveSetlist() {
@@ -259,6 +262,7 @@ const setlistDialog = document.getElementById("setlist");
 const setlistItems = document.getElementById("setlist-items");
 const setlistEmpty = document.getElementById("setlist-empty");
 const setlistName = document.getElementById("setlist-name");
+const setlistInstrument = document.getElementById("setlist-instrument");
 const setlistDownload = document.getElementById("setlist-download");
 const setlistClear = document.getElementById("setlist-clear");
 
@@ -304,6 +308,7 @@ function renderSetlist() {
 if (setlistDialog) {
   setlistBtn.addEventListener("click", () => {
     setlistName.value = setlist.name;
+    setlistInstrument.value = setlist.instrument;
     renderSetlist();
     setlistDialog.showModal();
   });
@@ -311,8 +316,17 @@ if (setlistDialog) {
   // A tap on the dim backdrop (outside the panel) closes it too.
   setlistDialog.addEventListener("click", (e) => { if (e.target === setlistDialog) setlistDialog.close(); });
   setlistName.addEventListener("input", () => { setlist.name = setlistName.value.slice(0, 60); saveSetlist(); });
+  setlistInstrument.addEventListener("change", () => { setlist.instrument = setlistInstrument.value; saveSetlist(); });
+  // "Print for" asks the chord_chart tool again for each chart (one MCP batch), so the
+  // transposing is done by the Worker's code, never on the page or by the model.
   setlistDownload.addEventListener("click", () =>
-    makePdf(() => ChartSheet.downloadSetlist(setlist.name.trim() || "Setlist", setlist.charts), setlistDownload, "Making PDF…"));
+    makePdf(async () => {
+      const name = setlist.name.trim() || "Setlist";
+      const { charts, kept } = await SetlistPrint.chartsFor(setlist.charts, setlist.instrument, { url: `${WORKER_URL}/mcp`, fetchFn: fetch });
+      const tag = SetlistPrint.label(setlist.instrument);
+      await ChartSheet.downloadSetlist(tag ? `${name} (${tag})` : name, charts);
+      if (kept.length) toast(`Printed as saved: ${kept.join(", ")}. Ask for ${kept.length === 1 ? "it" : "them"} again in the chat to switch.`);
+    }, setlistDownload, "Making PDF…"));
   // Two taps to clear, never a browser confirm() box.
   let clearArmed = null;
   setlistClear.addEventListener("click", () => {

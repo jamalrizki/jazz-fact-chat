@@ -673,8 +673,10 @@ async function chordChart({ tune, key, instrument }) {
 export function splitChartResult(sc) {
   // For a transposing instrument the chart header says so, so nobody reads it as concert.
   const pageKey = sc.instrument ? `${sc.key}, for ${sc.instrument} instruments` : sc.key;
+  // concert_key lets the setlist re-ask for the same chart for another instrument (setlist-print.js).
+  const concertKey = sc.concert_key || sc.key;
   return {
-    page: { title: sc.title, composer: sc.composer, key: pageKey, form: sc.form, style: sc.layout.style, bars: sc.layout.bars },
+    page: { title: sc.title, composer: sc.composer, key: pageKey, concert_key: concertKey, form: sc.form, style: sc.layout.style, bars: sc.layout.bars },
     model: {
       found: true, title: sc.title, composer: sc.composer, key: sc.key,
       ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),

@@ -88,6 +88,15 @@
     <label class="sl-name">Name
       <input id="setlist-name" type="text" maxlength="60" placeholder="Setlist" autocomplete="off">
     </label>
+    <label class="sl-name">Print for
+      <select id="setlist-instrument">
+        <option value="saved">Each chart as saved</option>
+        <option value="concert">Concert (C instruments)</option>
+        <option value="Bb">Bb: trumpet, tenor, soprano, clarinet</option>
+        <option value="Eb">Eb: alto, bari</option>
+        <option value="F">F: French horn</option>
+      </select>
+    </label>
     <ol id="setlist-items" class="sl-items"></ol>
     <p id="setlist-empty" class="sl-empty" hidden>No charts yet. Open a chart's ⋯ menu and choose “Add to setlist”.</p>
     <div class="sl-actions">
@@ -98,6 +107,7 @@
 
   <script src="config.js"></script>
   <script src="charts.js"></script>
+  <script src="setlist-print.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
