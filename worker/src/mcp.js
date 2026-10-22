@@ -90,7 +90,7 @@ export async function handleRpc(msg, env = {}, { internal = false } = {}) {
       // Asking for a tool that doesn't exist is a *protocol* error...
       // (Internal-only tools look exactly like unknown ones to public callers.)
       if (typeof name !== "string" || !hasTool(name) || (!internal && isInternalOnly(name))) {
-        return rpcError(id, INVALID_PARAMS, `Unknown tool: ${name}`);
+        return rpcError(id, INVALID_PARAMS, "Unknown tool"); // never echo the caller's text
       }
       // ...but a tool that runs and fails is a normal *result* with isError: true,
       // so the model gets to see the failure and react to it.

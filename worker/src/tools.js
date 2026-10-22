@@ -217,7 +217,8 @@ export function publicDefinition({ name, title, description, inputSchema, annota
  */
 export async function runTool(name, args, env = {}) {
   const tool = BY_NAME.get(name);
-  if (!tool) return { result: { error: `Unknown tool "${name}".` }, isError: true };
+  // The name comes from the caller (the model or a public /mcp client): never echo it.
+  if (!tool) return { result: { error: "Unknown tool. Use one of the listed tools." }, isError: true };
   if (args === null || typeof args !== "object" || Array.isArray(args)) {
     return { result: { error: "Tool arguments must be a JSON object." }, isError: true };
   }
@@ -250,7 +251,7 @@ async function lookupMusician({ name }) {
     encodeURIComponent(name);
   const search = await getJson(searchUrl);
   const hits = search?.query?.search || [];
-  if (hits.length === 0) return { found: false, message: `No Wikipedia article found for "${name}".` };
+  if (hits.length === 0) return { found: false, message: NOT_FOUND("No Wikipedia article matched that name.") };
 
   // Prefer a hit whose snippet looks like a musician; otherwise take the top hit.
   const musical = /jazz|musician|pianist|saxophon|trumpet|bassist|drummer|guitarist|singer|vocalist|composer|bandleader|band/i;
@@ -296,7 +297,7 @@ async function albumLineup({ album, artist }) {
   if (candidates.length === 0) {
     return {
       found: false,
-      message: `MusicBrainz has no release matching "${album}"${artist ? ` by ${artist}` : ""}.`,
+      message: NOT_FOUND(`MusicBrainz has no release matching that album${artist ? " and artist" : ""}.`),
     };
   }
 
@@ -605,7 +606,7 @@ async function chordChart({ tune, key, instrument }) {
   if (!chart) {
     return {
       found: false,
-      message: `"${tune}" isn't in the chord-chart library (${CHARTS.length} tunes). Tell the user that, and mention any close matches in "suggestions". Do not write a chart for it from memory.`,
+      message: `That tune isn't in the chord-chart library (${CHARTS.length} tunes). Tell the user that, and mention any close matches in "suggestions". Do not write a chart for it from memory.`,
       suggestions: suggestCharts(tune),
     };
   }
@@ -719,5 +720,12 @@ async function getJson(url) {
   if (!res.ok) throw new Error(`upstream HTTP ${res.status}`);
   return res.json();
 }
+
+/**
+ * Not-found results. They never repeat what the caller typed (that text comes from
+ * the model or a public /mcp client, so echoing it would hand it back as if the tool
+ * said it), and they tell the model to abstain rather than fill the gap from memory.
+ */
+const NOT_FOUND = (what) => `${what} Try search_jazz with a better query; if that finds nothing either, tell the user you couldn't find it. Do not fill the gap from memory.`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

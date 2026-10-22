@@ -25,6 +25,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 ```
 
 - **The model never runs anything.** It returns `tool_calls`; the Worker runs them through MCP and sends the results back until the model answers (at most 4 tool rounds).
+- **Not found means not found.** When a lookup comes back empty, the result says so and tells the model not to fill the gap from memory. It never repeats what the caller typed (tune, album, name, or an unknown tool name): that text comes from the model or a public `/mcp` client, and echoing it would hand it back as if the tool had said it.
 - **Tools are defined once** (`worker/src/tools.js`, MCP-native `inputSchema`). The same definitions serve outside MCP clients at `/mcp` and the app's own chat loop. `mcp-client.js` converts them to the OpenAI function format the LLM providers expect.
 - **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags from replies.
 - **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two.
@@ -121,6 +122,7 @@ worker/src/retry-wait.js         reads Groq's "try again in …" waits (435ms, 1
 worker/scripts/import-charts.mjs chart export → chord library
 worker/scripts/embed-books.mjs   reference chunks → vectors (Workers AI)
 worker/test/voicings.test.js     chord-spelling tests
+worker/test/abstention.test.js   not-found results: no chart or names, no echo of caller text (APIs stubbed, offline)
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 rag/                             text extraction and chunking for the reference material
 ```
