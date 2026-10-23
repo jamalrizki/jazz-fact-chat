@@ -766,11 +766,11 @@ pre.code {
 .sl-close { width: 36px; height: 36px; border-radius: 6px; background: transparent; color: var(--muted); font-size: 1.5rem; line-height: 1; }
 .sl-close:hover { color: #fff; }
 .sl-name { display: flex; flex-direction: column; gap: 4px; margin: 14px 0 10px; color: var(--faint); font-size: 0.8rem; }
-.sl-name input {
+.sl-name input, .sl-name select {
   padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--input-bg); color: var(--ink); font: inherit; font-size: 1rem;
 }
-.sl-name input:focus { outline: none; border-color: var(--red); box-shadow: 0 0 8px rgba(var(--red-rgb), 0.4); }
+.sl-name input:focus, .sl-name select:focus { outline: none; border-color: var(--red); box-shadow: 0 0 8px rgba(var(--red-rgb), 0.4); }
 .sl-items { max-height: 46dvh; margin: 0; padding: 0; overflow-y: auto; list-style: none; counter-reset: sl; }
 .sl-items li {
   display: flex; align-items: center; gap: 8px; padding: 7px 0;

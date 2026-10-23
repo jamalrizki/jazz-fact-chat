@@ -28,6 +28,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 - **Tools are defined once** (`worker/src/tools.js`, MCP-native `inputSchema`). The same definitions serve outside MCP clients at `/mcp` and the app's own chat loop. `mcp-client.js` converts them to the OpenAI function format the LLM providers expect.
 - **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags from replies.
 - **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two.
+- **The setlist calls the MCP server directly.** Its "Print for" switch (concert, Bb, Eb, F) sends one JSON-RPC batch of `chord_chart` `tools/call`s to `/mcp` (`setlist-print.js`), with no model in the loop, so the page never transposes anything itself.
 
 ## Tools
 
@@ -109,6 +110,7 @@ For local debugging, `DEBUG_BOOKS=1` in `worker/.dev.vars` prints which passages
 ```
 index.html, app.js, style.css    chat page (lounge theme, chord-chart renderer, chart menu, setlist)
 charts.js                        chart row layout (shared) and PDF export (jsPDF, loaded on demand)
+setlist-print.js                 setlist "Print for" switch: re-asks chord_chart over /mcp for another instrument
 docs.html, docs.js               "How it works" page (tool list loaded live via tools/list)
 config.js                        Worker URL (local vs deployed)
 worker/src/index.js              chat endpoint, system prompt, tool-use loop, provider fallback, source-tag filter
@@ -122,6 +124,8 @@ worker/scripts/import-charts.mjs chart export → chord library
 worker/scripts/embed-books.mjs   reference chunks → vectors (Workers AI)
 worker/test/voicings.test.js     chord-spelling tests
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
+worker/test/instrument-charts.test.js  charts for Bb, Eb and F instruments
+worker/test/setlist-print.test.js      setlist "Print for" switch, end to end through /mcp
 rag/                             text extraction and chunking for the reference material
 ```
 
