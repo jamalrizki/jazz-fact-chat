@@ -102,6 +102,15 @@ test("slash chords report the bass", () => {
   assert.equal(chordVoicings({ chord: "C6/9/E" }).chord_tones_text, "C E G A D");
 });
 
+test("6/9 chords are echoed as 6/9, not 69", () => {
+  const cases = { "C6/9": "C6/9", C69: "C6/9", "C(6/9)": "C6/9", "Cm6/9": "Cm6/9", "Bb6/9/D": "Bb6/9/D", "Cmaj6/9": "Cmaj6/9", "F♯6/9": "F#6/9" };
+  for (const [input, echo] of Object.entries(cases)) assert.equal(chordVoicings({ chord: input }).chord, echo, input);
+  // The notes don't change, and nothing else picks up a slash.
+  assert.equal(chordVoicings({ chord: "C69" }).chord_tones_text, "C E G A D");
+  assert.equal(chordVoicings({ chord: "C13" }).chord, "C13");
+  assert.equal(chordVoicings({ chord: "C7(b9,#11)" }).chord, "C7b9#11");
+});
+
 test("chord-scales: the usual textbook pairing", () => {
   const cases = {
     Cmaj7: "major (Ionian): C D E F G A B",
