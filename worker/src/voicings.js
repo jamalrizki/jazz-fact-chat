@@ -211,6 +211,13 @@ function chooseScale(degrees) {
 
 /* ---------- the tool ---------- */
 
+/**
+ * The parser reads "6/9" as "69" (so the slash isn't taken for a bass note), but the
+ * echoed symbol should look the way musicians write it: C6/9, not C69. The quality has
+ * already parsed through the whitelist grammar, where "69" only ever means 6/9.
+ */
+const displayQuality = (quality) => quality.replace("69", "6/9");
+
 function describe(letter, root, rootPc, quality, bass, { scale = false, checkNotes = [] } = {}) {
   const degrees = parseQuality(quality);
   const spell = (d) => spellDegree(letter, rootPc, d);
@@ -220,7 +227,7 @@ function describe(letter, root, rootPc, quality, bass, { scale = false, checkNot
   const core = tones.filter((t) => !EXTENSION_DEGREES.has(t.degree)).map((t) => t.note);
   const result = {
     found: true,
-    chord: root + quality + (bass ? "/" + bass : ""),
+    chord: root + displayQuality(quality) + (bass ? "/" + bass : ""),
     chord_tones: tones,
     chord_tones_text: prettyList(tones.map((t) => t.note)),
     inversions: core.map((_, i) => `${INVERSION_NAMES[i]}: ${prettyList(rotate(core, i))}`),
