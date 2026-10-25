@@ -317,6 +317,112 @@ export function parseWritten(music) {
   return bars;
 }
 
+/* ---------- 3c. the chart as written → the form as PLAYED, D.C./D.S. jumps taken ----------
+ * parseMusic() expands repeats but not D.C./D.S. jumps, so a tune written "D.C. al Coda"
+ * came out short (wrong bar count; the coda glued on right after the body). This walks
+ * the written bars the way a band reads them:
+ *   1. the body, with repeats and endings as written, up to the coda sign that starts the coda
+ *      (al Fine: to the end of the chart);
+ *   2. back to the top (D.C.) or the segno (D.S.) with repeats NOT taken (last ending only),
+ *      the usual lead-sheet rule, until the "to coda" sign (al Coda) or the bar marked Fine;
+ *   3. al Coda: the coda, to the end.
+ * Returns null when there's no jump or the marks are ambiguous (two jumps, no single segno,
+ * not exactly two coda signs, no single Fine, 3rd endings, signs in an impossible order).
+ * The caller then keeps parseMusic()'s sections, i.e. the chart is no worse than before.
+ */
+const JUMP = /^D\.\s?([CS])\.\s*al\s+(Coda|Fine)\b/i;
+const MAX_PLAYED_BARS = 512;
+
+export function playThrough(written) {
+  const where = (test) => written.flatMap((b, i) => (test(b) ? [i] : []));
+  const jumps = where((b) => b.m && /^D\.\s?[CS]\./i.test(b.m.trim()));
+  if (jumps.length !== 1) return null;
+  const jm = written[jumps[0]].m.trim().match(JUMP);
+  if (!jm) return null; // e.g. "D.C. al 2nd End." — not handled
+  if (written.some((b) => b.n >= 3)) return null;
+  const end = written.length - 1;
+
+  let target = 0;
+  if (jm[1].toUpperCase() === "S") {
+    const segnos = where((b) => b.s);
+    if (segnos.length !== 1) return null;
+    target = segnos[0];
+  }
+
+  const order = [];
+  if (jm[2].toLowerCase() === "coda") {
+    const codas = where((b) => b.q);
+    if (codas.length !== 2) return null;
+    const [toCoda, coda] = codas;
+    if (!(target <= toCoda && toCoda < coda && jumps[0] < coda && coda > 0)) return null;
+    if (!walk(written, 0, coda - 1, true, order)) return null;
+    if (!walk(written, target, toCoda, false, order)) return null;
+    if (!walk(written, coda, end, true, order)) return null;
+  } else {
+    const fines = where((b) => b.m && /^fine\b/i.test(b.m.trim()));
+    if (fines.length !== 1) return null;
+    const fine = fines[0];
+    if (!(target <= fine && fine < end)) return null;
+    if (!walk(written, 0, end, true, order)) return null;
+    if (!walk(written, target, fine, false, order)) return null;
+  }
+  if (order.length > MAX_PLAYED_BARS) return null;
+
+  // Resolve % signs against the bars as played, then group into sections at each label.
+  const played = [];
+  for (const i of order) {
+    const b = written[i];
+    let chords = b.c && b.c.length ? b.c : null;
+    if (!chords && b.r === "%") chords = played[played.length - 1]?.chords;
+    if (!chords && b.r === "%2") chords = played[played.length - 2]?.chords;
+    if (!chords) return null;
+    played.push({ label: b.l || "", chords });
+  }
+  const sections = [];
+  for (const b of played) {
+    if (!sections.length || b.label) sections.push({ label: b.label, bars: [] });
+    sections[sections.length - 1].bars.push(b.chords.join(" "));
+  }
+  return sections;
+}
+
+// Play written bars from index `from` until bar `last` has been played (pushed onto `order`).
+// takeRepeats: take each "}" repeat once and skip the 1st ending on the way back (pass 1),
+// or ignore repeats and play only the last ending (the pass after a D.C./D.S.).
+// Returns false if `last` can't be reached, so playThrough() gives up instead of guessing.
+function walk(w, from, last, takeRepeats, order) {
+  let braceStart = null; // bar that opened the current "{" repeat
+  let sectionStart = from; // latest "[" (where a "}" with no "{" goes back to), as parseMusic does
+  let secondTime = false;
+  const taken = new Set();
+  let i = from;
+  for (let guard = 0; guard <= MAX_PLAYED_BARS; guard++) {
+    if (i >= w.length) return false;
+    const b = w[i];
+    if (b.o === "{") braceStart = i;
+    if (b.o === "[") sectionStart = i;
+    if (b.n === 1 && (secondTime || !takeRepeats)) {
+      const next = w.findIndex((x, k) => k > i && x.n === 2);
+      if (next < 0 || (last >= i && last < next)) return false;
+      secondTime = false;
+      braceStart = null;
+      i = next;
+      continue;
+    }
+    order.push(i);
+    if (b.e === "}" && takeRepeats && !taken.has(i)) {
+      taken.add(i);
+      secondTime = true;
+      i = braceStart ?? sectionStart;
+      continue;
+    }
+    if (b.e === "}") { secondTime = false; braceStart = null; }
+    if (i === last) return true;
+    i += 1;
+  }
+  return false;
+}
+
 /* ---------- 4. song → library entry ---------- */
 
 const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -333,7 +439,12 @@ function fixComposer(c) {
 }
 
 export function toEntry(song) {
-  const { sections, notes, time } = parseMusic(song.music);
+  const parsed = parseMusic(song.music);
+  const { notes, time } = parsed;
+  const written = parseWritten(song.music);
+  // A D.C./D.S. chart is played through with its jumps taken; anything else (or an
+  // ambiguous jump) keeps the repeats-only expansion.
+  const sections = playThrough(written) || parsed.sections;
   const keyRaw = (song.key || "C").trim();
   const minor = keyRaw.endsWith("-");
   const key = keyRaw.replace(/-$/, "");
@@ -352,7 +463,7 @@ export function toEntry(song) {
     mode: minor ? "minor" : "major",
     form,
     sections,
-    written: parseWritten(song.music),
+    written,
     style: song.style || undefined,
     source: "curated chord library",
   };

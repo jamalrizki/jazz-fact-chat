@@ -91,6 +91,8 @@ npm run import -- --merge path/to/export.html   # add to the library (existing c
 npm run import -- path/to/export.html           # replace the library
 ```
 
+Each chart keeps two views: `written` (the bars as written, with repeats, endings, signs and codas in place; the page draws this) and `sections` (the form as played; `chart_text`, `form` and the bar count come from it). For D.C./D.S. al Coda/al Fine charts the importer plays the jumps through: the body with its repeats, back to the top or the segno with repeats not taken (last ending only), then on to the coda or stop at Fine. If the signs don't add up (no segno, not exactly two coda signs, two jumps, 3rd endings), the chart keeps the repeats-only expansion. Charts imported before this rule keep their old `sections` until you import again.
+
 ## Reference search (RAG)
 
 `search_theory_books` searches scoped reference material on jazz theory, harmony, arranging and history. The material is not in the repo (`knowledge/` is gitignored).
