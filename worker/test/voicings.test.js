@@ -261,7 +261,7 @@ test("tool definition: public, read-only, small", () => {
   assert.notEqual(t.internalOnly, true);
   assert.equal(t.annotations.readOnlyHint, true);
   assert.equal(t.annotations.openWorldHint, false);
-  assert.deepEqual(Object.keys(t.inputSchema.properties).sort(), ["check_notes", "chord", "scale"]);
+  assert.deepEqual(Object.keys(t.inputSchema.properties).sort(), ["check_notes", "chord", "scale", "scale_name"]);
   assert.equal(t.inputSchema.additionalProperties, false);
   assert.ok(JSON.stringify({ d: t.description, s: t.inputSchema }).length < 1100, "definition is sent with every request: keep it small");
 });
