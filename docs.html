@@ -130,6 +130,7 @@
         <li><strong>"How many albums did Miles Davis make with John Coltrane?"</strong> → <code>search_jazz</code>. The general fallback: it searches Wikipedia (plus All About Jazz, Discogs and the Jazz Discography Project) and returns only the passages relevant to the question. The model uses it whenever it isn't sure, and whenever another tool comes back empty.</li>
         <li><strong>"Chart for My Funny Valentine in F."</strong> → <code>chord_chart</code>. See <a href="#charts">Chord charts</a>.</li>
         <li><strong>"What notes are in E7#11?"</strong> → <code>chord_voicings</code>. See <a href="#notes">Chord notes</a>.</li>
+        <li><strong>"Spell B♭ bebop dominant"</strong> → <code>chord_voicings</code> with a scale name.</li>
         <li><strong>"Explain the Lydian Chromatic Concept."</strong> → <code>search_theory_books</code>. Theory, harmony, improvisation, voicings, arranging, practice and history. See <a href="#books">Reference search</a>.</li>
         <li><strong>"Tell me a fun jazz fact."</strong> → <code>random_jazz_fact</code>. Only for trivia requests, never to answer a specific question.</li>
         <li><strong>"What instrument did Charlie Parker play?"</strong> → no tool. Well-established facts are something the model knows well enough.</li>
@@ -168,7 +169,8 @@
         <li>A chord symbol is read as degrees of the root's major scale: <code>7</code> is the lowered 7th, <code>#11</code> the raised 4th, and so on. Triads, 6ths, 7ths, extensions, alterations, <code>alt</code>, add chords and slash chords all work.</li>
         <li>Each note gets its letter first, then its sharp or flat, so spellings are correct, not just the right keys: E7#11 is E G♯ B D A♯, and G♯maj7 is G♯ B♯ D♯ F𝄪.</li>
         <li>It also gives inversions and the rootless form, and, if asked, the usual chord-scale (Dorian for m7, Lydian dominant for 7#11, altered for 7alt, and so on).</li>
-        <li>It can check notes from elsewhere against a chord and its scale.</li>
+        <li>It spells any scale by name on any root, too: the modes, harmonic and melodic minor, altered, diminished, whole tone, pentatonics, blues and bebop scales ("spell D harmonic minor" gives D E F G A B♭ C♯).</li>
+        <li>It can check notes from elsewhere against a chord or a scale.</li>
         <li>Give it just a root ("a rootless A chord") and it shows labelled examples instead of guessing the quality.</li>
       </ul>
     </section>

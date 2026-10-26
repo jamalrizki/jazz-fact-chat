@@ -142,17 +142,19 @@ export const TOOLS = [
   },
   {
     name: "chord_voicings",
-    title: "Chord tones, inversions and chord-scales",
+    title: "Chord tones, inversions and scales",
     description:
       "Spells any chord symbol correctly in code: chord tones, inversions, rootless form. Use for every question about the notes of a chord or which scale fits it. " +
       "Takes standard symbols: triads (C, Cm, Cdim, Caug, Csus4), 6ths, 7ths and extensions (Cmaj7, Cm7b5, Cdim7, C9, Cm11, C13), alterations (C7b9, C7#11, C7alt), add and slash chords (Cadd9, C/E). " +
       "A bare root returns labelled examples instead of assuming a quality. scale: true adds the usual chord-scale. " +
+      "To spell a named scale (Dorian, harmonic minor, altered, blues, bebop dominant...), pass a bare root plus scale_name. " +
       "check_notes verifies notes from elsewhere against the chord and its scale. Copy note names exactly.",
     inputSchema: {
       type: "object",
       properties: {
         chord: { type: "string", maxLength: 24, description: "Chord symbol, e.g. \"Ebmaj7\", \"F#7\", \"Bm7b5\"." },
         scale: { type: "boolean" },
+        scale_name: { type: "string", maxLength: 30 },
         check_notes: { type: "array", maxItems: 8, items: { type: "string", maxLength: 3 } },
       },
       required: ["chord"],
