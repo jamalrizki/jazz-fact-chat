@@ -268,7 +268,7 @@ test("tool definition: public, read-only, small", () => {
 
 test("MCP: public /mcp lists it, search_theory_books stays hidden, calls work", async () => {
   const list = await handleRpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, {});
-  assert.deepEqual(list.result.tools.map((x) => x.name).sort(), ["album_lineup", "chord_chart", "chord_voicings", "lookup_musician", "random_jazz_fact", "search_jazz"]);
+  assert.deepEqual(list.result.tools.map((x) => x.name).sort(), ["album_lineup", "chord_chart", "chord_voicings", "find_tunes", "lookup_musician", "random_jazz_fact", "search_jazz"]);
   const internal = await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, {}, { internal: true });
   assert.ok(internal.result.tools.some((x) => x.name === "search_theory_books"));
   const call = await handleRpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "chord_voicings", arguments: { chord: "Ebmaj7" } } }, {});
