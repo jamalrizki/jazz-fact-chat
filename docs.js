@@ -72,7 +72,7 @@ async function loadTools() {
   } catch (err) {
     statusEl.textContent =
       "Couldn't reach the MCP server right now, so the live tool list isn't shown. " +
-      "The public tools are lookup_musician, album_lineup, search_jazz, chord_chart, chord_voicings, and random_jazz_fact.";
+      "The public tools are lookup_musician, album_lineup, search_jazz, chord_chart, find_tunes, chord_voicings, and random_jazz_fact.";
     statusEl.classList.add("warn");
     console.error(err);
   }

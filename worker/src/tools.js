@@ -141,6 +141,26 @@ export const TOOLS = [
     handler: chordChart,
   },
   {
+    name: "find_tunes",
+    title: "Find tunes in the chord library",
+    description:
+      "List tunes from the chord library by composer, key and/or mode, e.g. \"Miles Davis tunes\", \"tunes in Bb\", \"minor tunes in C\". " +
+      "Use it when the user wants ideas for a set or asks which tunes there are, not for one named tune (use chord_chart). " +
+      "Returns titles with key and form only; list only those titles.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        composer: { type: "string", maxLength: 60 },
+        key: { type: "string", maxLength: 12, description: "e.g. \"F\", \"Bb\", \"C minor\"" },
+        mode: { type: "string", enum: ["major", "minor"] },
+        limit: { type: "integer", minimum: 1, maximum: 10 },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false }, // library metadata only, never chords
+    handler: findTunes,
+  },
+  {
     name: "chord_voicings",
     title: "Chord tones, inversions and scales",
     description:
@@ -664,6 +684,78 @@ async function chordChart({ tune, key, instrument }) {
     chart_text: lines.join("\n"),
     layout: { style: chart.style || null, bars: written },
     note: "Common changes as typically played. Published versions and players' reharmonizations vary.",
+  };
+}
+
+/**
+ * find_tunes: browse the library by its metadata instead of naming a tune.
+ * Filtering happens here, against fields every chart already has, so every
+ * title the model is allowed to list has a chart behind it. It never returns chords.
+ */
+const FIND_DEFAULT_LIMIT = 8;
+// A whole key name and nothing else: "F", "Bb", "F#", "C minor", "Cm", "Eb major", "C-".
+const KEY_ARG_RE = /^([A-G])\s*(#|♯|b|♭|sharp|flat)?\s*(maj|major|m|min|minor|-)?$/i;
+
+function parseKeyArg(input) {
+  const m = input.match(KEY_ARG_RE);
+  if (!m) return null;
+  const key = parseKey(m[1] + (m[2] || ""));
+  const q = (m[3] || "").toLowerCase();
+  return { pc: key.pc, mode: !q ? null : q.startsWith("maj") ? "major" : "minor" };
+}
+
+async function findTunes({ composer, key, mode, limit } = {}) {
+  const has = (v) => v !== undefined && v !== null && v !== "";
+  if (!has(composer) && !has(key) && !has(mode)) {
+    throw new Error('Give at least one filter: "composer", "key" or "mode".');
+  }
+  let who = null;
+  if (has(composer)) {
+    who = normalizeTitle(requireString(composer, "composer", 60));
+    if (who.length < 3) throw new Error('"composer" needs at least 3 letters.');
+  }
+  let wantKey = null;
+  if (has(key)) {
+    wantKey = parseKeyArg(requireString(key, "key", 12));
+    if (!wantKey) throw new Error("That is not a key I understand. Use a key like F, Bb, F# or C minor.");
+  }
+  if (has(mode) && mode !== "major" && mode !== "minor") throw new Error('"mode" must be "major" or "minor".');
+  const wantMode = has(mode) ? mode : wantKey?.mode || null;
+  if (wantKey?.mode && has(mode) && wantKey.mode !== mode) throw new Error('"key" and "mode" disagree.');
+  if (!has(limit)) limit = FIND_DEFAULT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error('"limit" must be a whole number from 1 to 10.');
+
+  const matches = CHARTS.filter((c) => {
+    if (who && !normalizeTitle(c.composer || "").includes(who)) return false;
+    if (wantMode && c.mode !== wantMode) return false;
+    if (wantKey) {
+      const k = parseKey(c.key || "");
+      if (!k || k.pc !== wantKey.pc) return false;
+    }
+    return true;
+  }).sort((a, b) => a.title.localeCompare(b.title, "en", { sensitivity: "base" }));
+
+  const filters = [who && "composer", wantKey && "key", wantMode && "mode"].filter(Boolean);
+  if (matches.length === 0) {
+    return {
+      found: false,
+      total: 0,
+      message: `No tunes in the chord library match that ${filters.join(" + ")}. Say so, and offer to loosen a filter. Do not list tunes from memory.`,
+    };
+  }
+  const shown = matches.slice(0, limit);
+  return {
+    found: true,
+    total: matches.length,
+    tunes: shown.map((c) => ({
+      title: c.title,
+      key: `${c.key} ${c.mode}`,
+      form: c.form,
+      ...(c.style ? { style: c.style } : {}),
+    })),
+    ...(matches.length > shown.length ? { more: matches.length - shown.length } : {}),
+    note: "List only these titles, with key and form as given. Any of them can be shown with chord_chart." +
+      (matches.length > shown.length ? " There are more: offer to narrow it down." : ""),
   };
 }
 

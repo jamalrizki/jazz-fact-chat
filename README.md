@@ -17,7 +17,7 @@ Browser (GitHub Pages)
 Cloudflare Worker ── holds API keys as secrets, owns the system prompt
    │   chat loop = MCP host:  initialize → tools/list → tools/call
    ├──► MCP server (same Worker; public at /mcp minus internal-only tools)
-   │       lookup_musician · album_lineup · search_jazz · chord_chart
+   │       lookup_musician · album_lineup · search_jazz · chord_chart · find_tunes
    │       chord_voicings · random_jazz_fact · search_theory_books (internal only)
    │          Wikipedia · MusicBrainz · Tavily (All About Jazz, Discogs, jazzdisco.org)
    │          chord library · chord-spelling code · Workers AI + Vectorize (reference material)
@@ -38,13 +38,14 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players) |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
 | `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key, or written for Bb, Eb or F instruments (`instrument`; `key` stays the concert key) |
+| `find_tunes` | Chord library metadata | Lists library tunes by composer, key and/or mode ("Miles Davis tunes", "minor tunes in C"), up to 10 titles with key and form. Filtering is done in code, so every title has a chart; never returns chords |
 | `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord; any named scale on any root (`scale_name`: modes, harmonic/melodic minor, altered, diminished, pentatonic, blues, bebop) |
 | `random_jazz_fact` | Local JSON | Trivia |
 | `search_theory_books` | Workers AI + Vectorize, reranked | Theory, harmony, improvisation, arranging, practice and history questions (max 2 per question). Searches scoped reference material. **Internal only:** the chat uses it; the public `/mcp` endpoint doesn't list or run it. |
 
 ## Use the MCP server
 
-Endpoint: `https://jazz-fact-chat.jamalrizki.workers.dev/mcp` (stateless Streamable HTTP, tools only, read-only, 6 public tools).
+Endpoint: `https://jazz-fact-chat.jamalrizki.workers.dev/mcp` (stateless Streamable HTTP, tools only, read-only, 7 public tools).
 
 ```bash
 curl -s https://jazz-fact-chat.jamalrizki.workers.dev/mcp \
