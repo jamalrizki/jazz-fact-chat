@@ -133,6 +133,7 @@ export const TOOLS = [
           enum: INSTRUMENTS,
           description: "For a horn player: Bb (trumpet, tenor, soprano, clarinet), Eb (alto, bari), F (French horn). Returns their written key; key stays concert.",
         },
+        similar: { type: "boolean", description: "Also list library tunes on the same changes." },
       },
       required: ["tune"],
       additionalProperties: false,
@@ -616,12 +617,15 @@ function suggestCharts(tune) {
   return scored.slice(0, 8).map((x) => x.title);
 }
 
-async function chordChart({ tune, key, instrument }) {
+async function chordChart({ tune, key, instrument, similar }) {
   tune = requireString(tune, "tune", 100);
   // Validate before the lookup, and never echo the caller's text back.
   if (instrument === undefined || instrument === null || instrument === "") instrument = "concert";
   if (typeof instrument !== "string" || !Object.hasOwn(INSTRUMENT_OFFSET, instrument)) {
     throw new Error(`"instrument" must be one of: ${INSTRUMENTS.join(", ")}.`);
+  }
+  if (similar !== undefined && similar !== null && typeof similar !== "boolean") {
+    throw new Error('"similar" must be true or false.');
   }
   const chart = findChart(tune);
   if (!chart) {
@@ -681,6 +685,8 @@ async function chordChart({ tune, key, instrument }) {
     ...(offset ? { instrument, concert_key: `${concertName} ${chart.mode}` } : {}),
     form: chart.form,
     bars: totalBars,
+    // Other library tunes on mostly the same changes. Compared in the tune's own key, so key/instrument don't matter.
+    ...(similar === true ? { similar: sameChanges(chart) } : {}),
     chart_text: lines.join("\n"),
     layout: { style: chart.style || null, bars: written },
     note: "Common changes as typically played. Published versions and players' reharmonizations vary.",
@@ -760,6 +766,69 @@ async function findTunes({ composer, key, mode, limit } = {}) {
 }
 
 /**
+ * Same changes (chord_chart similar: true): which other library tunes are built on
+ * mostly the same chords? Done here, bar by bar, so the model can't pair up tunes
+ * from memory. Each chart gets a fingerprint: one token per played bar, made from the
+ * bar's first chord as (root interval from the tune's key, quality class). Key doesn't
+ * matter, and neither do extensions or alterations (C7 = C9 = C13 = C7alt).
+ */
+const SIMILAR_MIN_SCORE = 0.75;
+const SIMILAR_MAX = 5;
+
+/** maj, min, dom, hdim or dim for a chord's quality text (what follows the root). Exported for tests. */
+export function qualityClass(q) {
+  q = q.replace(/\/.*$/, ""); // slash bass doesn't change the class
+  if (/^(m|min|mi|-)7?b5|^m9b5|^ø|^h/.test(q)) return "hdim";
+  if (/^(dim|o|°)/.test(q)) return "dim";
+  if (/^(m(?!aj)|min|mi|-)/.test(q)) return "min"; // m7, m6, mMaj7, m11...
+  if (/^(maj|M|Δ|\^)/.test(q)) return "maj";
+  if (/7|9|11|13|alt|sus/.test(q.replace(/add\d+/g, ""))) return "dom"; // C7, C9, C13, C7#5, C7sus4, Csus4 (not Cadd9)
+  return "maj"; // triad, 6, 6/9, add9, aug, power chord
+}
+
+const CHORD_ROOT_RE = /^([A-G])([b#]?)(.*)$/;
+const fingerprints = new WeakMap(); // chart -> tokens; computed once per Worker instance, on first use
+
+/** One token per played bar ("0:maj", "7:dom"...), or null when the chart's key can't be read. Exported for tests. */
+export function chartFingerprint(chart) {
+  if (fingerprints.has(chart)) return fingerprints.get(chart);
+  const key = parseKey(chart.key || "");
+  let fp = null;
+  if (key && Array.isArray(chart.sections)) {
+    fp = chart.sections.flatMap((sec) => sec.bars).map((bar) => {
+      const m = String(bar).split(" ")[0].match(CHORD_ROOT_RE);
+      // An unreadable bar (N.C., empty) gets a token that never matches anything.
+      return m ? `${(noteToPc(m[1], m[2]) - key.pc + 12) % 12}:${qualityClass(m[3])}` : null;
+    });
+  }
+  fingerprints.set(chart, fp);
+  return fp;
+}
+
+/**
+ * Library tunes whose bars match `chart` in at least 75% of the bars, best first, at most 5.
+ * Only charts with the same mode and the same number of bars are compared, so 16 bars of
+ * a tune that merely contains another never count. Exported for tests.
+ */
+export function sameChanges(chart, library = CHARTS) {
+  const mine = chartFingerprint(chart);
+  if (!mine || mine.length === 0) return [];
+  const out = [];
+  for (const other of library) {
+    if (other === chart || other.title === chart.title || other.mode !== chart.mode) continue;
+    const theirs = chartFingerprint(other);
+    if (!theirs || theirs.length !== mine.length) continue;
+    const matching = mine.reduce((n, tok, i) => n + (tok !== null && tok === theirs[i] ? 1 : 0), 0);
+    if (matching / mine.length >= SIMILAR_MIN_SCORE) {
+      out.push({ title: other.title, key: `${other.key} ${other.mode}`, matching_bars: matching, bars: mine.length });
+    }
+  }
+  return out
+    .sort((a, b) => b.matching_bars - a.matching_bars || a.title.localeCompare(b.title, "en", { sensitivity: "base" }))
+    .slice(0, SIMILAR_MAX);
+}
+
+/**
  * A found chord chart is split in two: the full chart for the page, and a short
  * summary for the model (it never sees the chords, so it can't garble them).
  * Used by the chat loop in index.js (kept here so tests can import it).
@@ -769,14 +838,20 @@ export function splitChartResult(sc) {
   const pageKey = sc.instrument ? `${sc.key}, for ${sc.instrument} instruments` : sc.key;
   // concert_key lets the setlist re-ask for the same chart for another instrument (setlist-print.js).
   const concertKey = sc.concert_key || sc.key;
+  // Same-changes matches are facts computed in code; the model may list only these.
+  const similarNote = !sc.similar ? "" : sc.similar.length
+    ? " similar lists the only library tunes on mostly the same changes (compared bar by bar in code). Name only these, and say each shares matching_bars of bars; versions vary, so suggest checking the chart."
+    : " No other library tune shares at least 75% of these bars. Say so; never name tunes on the same changes from memory.";
   return {
     page: { title: sc.title, composer: sc.composer, key: pageKey, concert_key: concertKey, form: sc.form, style: sc.layout.style, bars: sc.layout.bars },
     model: {
       found: true, title: sc.title, composer: sc.composer, key: sc.key,
       ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),
       form: sc.form, bars: sc.bars,
+      ...(sc.similar ? { similar: sc.similar } : {}),
       note: "The full chart is displayed to the user automatically. Do not write out the chords." +
-        (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : ""),
+        (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : "") +
+        similarNote,
     },
   };
 }
