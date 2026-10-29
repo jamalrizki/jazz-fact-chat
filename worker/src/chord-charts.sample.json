@@ -4,7 +4,7 @@
     "aliases": ["les feuilles mortes"],
     "composer": "Joseph Kosma",
     "key": "G", "mode": "minor",
-    "form": "AABC, 32 bars",
+    "form": "AABC, 32 bars", "style": "Medium Swing",
     "sections": [
       { "label": "A", "bars": ["Cm7", "F7", "Bbmaj7", "Ebmaj7", "Am7b5", "D7", "Gm6", "Gm6"] },
       { "label": "A", "bars": ["Cm7", "F7", "Bbmaj7", "Ebmaj7", "Am7b5", "D7", "Gm6", "Gm6"] },
@@ -17,7 +17,7 @@
     "aliases": [],
     "composer": "Kenny Dorham",
     "key": "C", "mode": "minor",
-    "form": "AB, 16 bars",
+    "form": "AB, 16 bars", "style": "Bossa Nova",
     "sections": [
       { "label": "A", "bars": ["Cm7", "Cm7", "Fm7", "Fm7", "Dm7b5", "G7", "Cm7", "Cm7"] },
       { "label": "B", "bars": ["Ebm7", "Ab7", "Dbmaj7", "Dbmaj7", "Dm7b5", "G7", "Cm7", "Dm7b5 G7"] }
@@ -28,7 +28,7 @@
     "aliases": ["impressions"],
     "composer": "Miles Davis",
     "key": "D", "mode": "minor",
-    "form": "AABA, 32 bars (D Dorian / E♭ Dorian)",
+    "form": "AABA, 32 bars (D Dorian / E♭ Dorian)", "style": "Medium Up Swing",
     "sections": [
       { "label": "A", "bars": ["Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7"] },
       { "label": "A", "bars": ["Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7", "Dm7"] },
@@ -51,7 +51,7 @@
     "aliases": ["i got rhythm", "rhythm"],
     "composer": "from Gershwin's I Got Rhythm",
     "key": "Bb", "mode": "major",
-    "form": "AABA, 32 bars",
+    "form": "AABA, 32 bars", "style": "Up Tempo Swing",
     "sections": [
       { "label": "A", "bars": ["Bb6 G7", "Cm7 F7", "Bb6 G7", "Cm7 F7", "Fm7 Bb7", "Ebmaj7 Ebm6", "Dm7 G7", "Cm7 F7"] },
       { "label": "A", "bars": ["Bb6 G7", "Cm7 F7", "Bb6 G7", "Cm7 F7", "Fm7 Bb7", "Ebmaj7 Ebm6", "Cm7 F7", "Bb6"] },
@@ -77,7 +77,7 @@
     "aliases": ["attya"],
     "composer": "Jerome Kern",
     "key": "Ab", "mode": "major",
-    "form": "AABA', 36 bars",
+    "form": "AABA', 36 bars", "style": "Medium Swing",
     "sections": [
       { "label": "A", "bars": ["Fm7", "Bbm7", "Eb7", "Abmaj7", "Dbmaj7", "Dm7 G7", "Cmaj7", "Cmaj7"] },
       { "label": "A", "bars": ["Cm7", "Fm7", "Bb7", "Ebmaj7", "Abmaj7", "Am7b5 D7", "Gmaj7", "Gmaj7"] },
@@ -90,7 +90,7 @@
     "aliases": [],
     "composer": "Duke Ellington & Billy Strayhorn",
     "key": "C", "mode": "major",
-    "form": "AABA, 32 bars",
+    "form": "AABA, 32 bars", "style": "Medium Swing",
     "sections": [
       { "label": "A", "bars": ["Dm7 G7", "Dm7 G7", "Em7 A7", "Em7 A7", "Am7 D7", "Abm7 Db7", "Cmaj7", "Cmaj7"] },
       { "label": "A", "bars": ["Dm7 G7", "Dm7 G7", "Em7 A7", "Em7 A7", "Am7 D7", "Abm7 Db7", "Cmaj7", "Cmaj7"] },
@@ -113,7 +113,7 @@
     "aliases": ["mr pc"],
     "composer": "John Coltrane",
     "key": "C", "mode": "minor",
-    "form": "12-bar minor blues",
+    "form": "12-bar minor blues", "style": "Up Tempo Swing",
     "sections": [
       { "label": "", "bars": ["Cm7", "Cm7", "Cm7", "Cm7", "Fm7", "Fm7", "Cm7", "Cm7", "Ab7", "G7", "Cm7", "G7"] }
     ]
@@ -123,7 +123,7 @@
     "aliases": [],
     "composer": "Herbie Hancock",
     "key": "F", "mode": "minor",
-    "form": "16 bars",
+    "form": "16 bars", "style": "Funk",
     "sections": [
       { "label": "", "bars": ["Fm7", "Fm7", "Fm7", "Fm7", "Db7", "Db7", "Db7", "Db7", "Dm7", "Dm7", "Dm7", "Dm7", "Fm7", "Fm7", "Fm7", "Fm7"] }
     ]
