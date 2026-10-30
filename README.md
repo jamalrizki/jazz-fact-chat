@@ -38,7 +38,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players) |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
 | `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key, or written for Bb, Eb or F instruments (`instrument`; `key` stays the concert key) |
-| `find_tunes` | Chord library metadata | Lists library tunes by composer, key, mode, style and/or form ("Miles Davis tunes", "bossas", "minor blues"), up to 10 titles with key, form and style. Style only matches styles the library actually has (otherwise it returns that list); form is blues, AABA or other, worked out from the chart's form. Filtering is done in code, so every title has a chart; never returns chords |
+| `find_tunes` | Chord library metadata | Lists library tunes by composer, key, mode, style and/or form ("Miles Davis tunes", "bossas", "minor blues"), up to 10 titles with key, form and style. Style only matches styles the library actually has (otherwise it returns that list); form is blues, AABA or other, worked out from the chart's form. With `instrument` (Bb, Eb, F) each title also gets `written_key`, computed like `chord_chart`'s (the `key` filter stays concert). Filtering is done in code, so every title has a chart; never returns chords |
 | `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord; any named scale on any root (`scale_name`: modes, harmonic/melodic minor, altered, diminished, pentatonic, blues, bebop) |
 | `random_jazz_fact` | Local JSON | Trivia |
 | `search_theory_books` | Workers AI + Vectorize, reranked | Theory, harmony, improvisation, arranging, practice and history questions (max 2 per question). Searches scoped reference material. **Internal only:** the chat uses it; the public `/mcp` endpoint doesn't list or run it. |
@@ -127,6 +127,7 @@ worker/test/voicings.test.js     chord-spelling tests
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 worker/test/instrument-charts.test.js  charts for Bb, Eb and F instruments
 worker/test/setlist-print.test.js      setlist "Print for" switch, end to end through /mcp
+worker/test/find-tunes-instrument.test.js  find_tunes written keys for Bb, Eb and F instruments
 rag/                             text extraction and chunking for the reference material
 ```
 

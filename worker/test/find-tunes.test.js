@@ -105,7 +105,7 @@ test("never returns chords", async () => {
 
 test("definition stays small (it rides on every request)", () => {
   const t = TOOLS.find((x) => x.name === "find_tunes");
-  assert.ok(JSON.stringify({ d: t.description, s: t.inputSchema }).length < 800);
+  assert.ok(JSON.stringify({ d: t.description, s: t.inputSchema }).length < 850);
 });
 
 test("MCP: public /mcp lists find_tunes and runs it", async () => {

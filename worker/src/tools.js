@@ -144,9 +144,9 @@ export const TOOLS = [
     name: "find_tunes",
     title: "Find tunes in the chord library",
     description:
-      "List tunes from the chord library by composer, key, mode, style and/or form, e.g. \"Miles Davis tunes\", \"bossas in F\", \"minor blues\". " +
-      "Use it when the user wants ideas for a set or asks which tunes there are, not for one named tune (use chord_chart). " +
-      "Returns titles with key and form only; list only those titles.",
+      "List chord-library tunes by composer, key, mode, style and/or form, e.g. \"Miles Davis tunes\", \"bossas in F\", \"minor blues\". " +
+      "For set ideas or which tunes there are, not one named tune (use chord_chart). " +
+      "Returns titles, keys and forms only; list only those. instrument adds written keys; key stays concert.",
     inputSchema: {
       type: "object",
       properties: {
@@ -156,6 +156,7 @@ export const TOOLS = [
         style: { type: "string", maxLength: 30, description: "e.g. \"bossa\", \"ballad\", \"swing\"" },
         form: { type: "string", enum: ["blues", "aaba", "other"] },
         limit: { type: "integer", minimum: 1, maximum: 10 },
+        instrument: { type: "string", enum: INSTRUMENTS },
       },
       additionalProperties: false,
     },
@@ -618,13 +619,28 @@ function suggestCharts(tune) {
   return scored.slice(0, 8).map((x) => x.title);
 }
 
-async function chordChart({ tune, key, instrument }) {
-  tune = requireString(tune, "tune", 100);
-  // Validate before the lookup, and never echo the caller's text back.
-  if (instrument === undefined || instrument === null || instrument === "") instrument = "concert";
+// The instrument argument shared by chord_chart and find_tunes. Missing means concert.
+// Never echoes the caller's text back.
+function checkInstrument(instrument) {
+  if (instrument === undefined || instrument === null || instrument === "") return "concert";
   if (typeof instrument !== "string" || !Object.hasOwn(INSTRUMENT_OFFSET, instrument)) {
     throw new Error(`"instrument" must be one of: ${INSTRUMENTS.join(", ")}.`);
   }
+  return instrument;
+}
+
+// The key a transposing instrument reads for concert pitch class `pc`: a fixed interval up,
+// named with the same sharp/flat rule as chord_chart's key argument (F# major, but Eb minor).
+function writtenKey(pc, offset, mode) {
+  const w = (pc + offset) % 12;
+  const sharpSet = mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
+  return { pc: w, name: sharpSet.has(SHARP_NAMES[w]) ? SHARP_NAMES[w] : FLAT_NAMES[w] };
+}
+
+async function chordChart({ tune, key, instrument }) {
+  tune = requireString(tune, "tune", 100);
+  // Validate before the lookup.
+  instrument = checkInstrument(instrument);
   const chart = findChart(tune);
   if (!chart) {
     return {
@@ -645,10 +661,7 @@ async function chordChart({ tune, key, instrument }) {
   // the written key is named with the same sharp/flat rule the key argument uses.
   const concertName = target === original ? chart.key : (sharpSet.has(target.name) ? SHARP_NAMES : FLAT_NAMES)[target.pc];
   const offset = INSTRUMENT_OFFSET[instrument];
-  if (offset) {
-    const pc = (target.pc + offset) % 12;
-    target = { pc, name: sharpSet.has(SHARP_NAMES[pc]) ? SHARP_NAMES[pc] : FLAT_NAMES[pc] };
-  }
+  if (offset) target = writtenKey(target.pc, offset, chart.mode);
   const semis = (target.pc - original.pc + 12) % 12;
   const useSharps = sharpSet.has(target.name);
   const names = useSharps ? SHARP_NAMES : FLAT_NAMES;
@@ -731,7 +744,7 @@ function matchStyles(q) {
   return hit;
 }
 
-async function findTunes({ composer, key, mode, style, form, limit } = {}) {
+async function findTunes({ composer, key, mode, style, form, limit, instrument } = {}) {
   const has = (v) => v !== undefined && v !== null && v !== "";
   if (!has(composer) && !has(key) && !has(mode) && !has(style) && !has(form)) {
     throw new Error('Give at least one filter: "composer", "key", "mode", "style" or "form".');
@@ -758,6 +771,8 @@ async function findTunes({ composer, key, mode, style, form, limit } = {}) {
   }
   if (!has(limit)) limit = FIND_DEFAULT_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error('"limit" must be a whole number from 1 to 10.');
+  instrument = checkInstrument(instrument);
+  const offset = INSTRUMENT_OFFSET[instrument];
 
   if (styles && styles.size === 0) {
     // Not a style the library uses: show the ones it does, instead of guessing.
@@ -795,14 +810,21 @@ async function findTunes({ composer, key, mode, style, form, limit } = {}) {
   return {
     found: true,
     total: matches.length,
-    tunes: shown.map((c) => ({
-      title: c.title,
-      key: `${c.key} ${c.mode}`,
-      form: c.form,
-      ...(c.style ? { style: c.style } : {}),
-    })),
+    ...(offset ? { instrument } : {}),
+    tunes: shown.map((c) => {
+      // The written key is computed here, the same way chord_chart computes it, never by the model.
+      const k = offset ? parseKey(c.key || "") : null;
+      return {
+        title: c.title,
+        key: `${c.key} ${c.mode}`,
+        ...(k ? { written_key: `${writtenKey(k.pc, offset, c.mode).name} ${c.mode}` } : {}),
+        form: c.form,
+        ...(c.style ? { style: c.style } : {}),
+      };
+    }),
     ...(matches.length > shown.length ? { more: matches.length - shown.length } : {}),
     note: "List only these titles, with key and form as given. Any of them can be shown with chord_chart." +
+      (offset ? ` key is concert; written_key is what ${instrument} instruments read. Give both exactly as given, and pass instrument: "${instrument}" to chord_chart.` : "") +
       (matches.length > shown.length ? " There are more: offer to narrow it down." : ""),
   };
 }
