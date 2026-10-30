@@ -144,7 +144,7 @@ export const TOOLS = [
     name: "find_tunes",
     title: "Find tunes in the chord library",
     description:
-      "List tunes from the chord library by composer, key and/or mode, e.g. \"Miles Davis tunes\", \"tunes in Bb\", \"minor tunes in C\". " +
+      "List tunes from the chord library by composer, key, mode, style and/or form, e.g. \"Miles Davis tunes\", \"bossas in F\", \"minor blues\". " +
       "Use it when the user wants ideas for a set or asks which tunes there are, not for one named tune (use chord_chart). " +
       "Returns titles with key and form only; list only those titles.",
     inputSchema: {
@@ -153,6 +153,8 @@ export const TOOLS = [
         composer: { type: "string", maxLength: 60 },
         key: { type: "string", maxLength: 12, description: "e.g. \"F\", \"Bb\", \"C minor\"" },
         mode: { type: "string", enum: ["major", "minor"] },
+        style: { type: "string", maxLength: 30, description: "e.g. \"bossa\", \"ballad\", \"swing\"" },
+        form: { type: "string", enum: ["blues", "aaba", "other"] },
         limit: { type: "integer", minimum: 1, maximum: 10 },
       },
       additionalProperties: false,
@@ -704,10 +706,35 @@ function parseKeyArg(input) {
   return { pc: key.pc, mode: !q ? null : q.startsWith("maj") ? "major" : "minor" };
 }
 
-async function findTunes({ composer, key, mode, limit } = {}) {
+// Form type, worked out from the chart's form text: "12-bar minor blues" → blues,
+// "AABA, 32 bars" and "AABA', 36 bars" → aaba, anything else → other.
+export function formType(form) {
+  const f = String(form || "");
+  if (/\bblues\b/i.test(f)) return "blues";
+  if (/^\s*AABA(?![A-Za-z])/i.test(f)) return "aaba";
+  return "other";
+}
+const FORM_TYPES = ["blues", "aaba", "other"];
+
+// The style names the library actually uses, so a style filter can only pick from these.
+const KNOWN_STYLES = [...new Set(CHARTS.map((c) => c.style).filter((v) => typeof v === "string" && v.trim()))]
+  .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+const MAX_STYLES_LISTED = 40;
+
+// "bossa" → Bossa Nova, "swing" → every swing style, "ballads" → Ballad. Returns a Set of
+// library style names (possibly empty). Matching is on normalized text, never fuzzy guessing.
+function matchStyles(q) {
+  const norm = KNOWN_STYLES.map((st) => [st, normalizeTitle(st)]);
+  const pick = (needle) => new Set(norm.filter(([, n]) => n.includes(needle)).map(([st]) => st));
+  let hit = pick(q);
+  if (hit.size === 0 && q.length > 3 && q.endsWith("s")) hit = pick(q.slice(0, -1));
+  return hit;
+}
+
+async function findTunes({ composer, key, mode, style, form, limit } = {}) {
   const has = (v) => v !== undefined && v !== null && v !== "";
-  if (!has(composer) && !has(key) && !has(mode)) {
-    throw new Error('Give at least one filter: "composer", "key" or "mode".');
+  if (!has(composer) && !has(key) && !has(mode) && !has(style) && !has(form)) {
+    throw new Error('Give at least one filter: "composer", "key", "mode", "style" or "form".');
   }
   let who = null;
   if (has(composer)) {
@@ -722,11 +749,32 @@ async function findTunes({ composer, key, mode, limit } = {}) {
   if (has(mode) && mode !== "major" && mode !== "minor") throw new Error('"mode" must be "major" or "minor".');
   const wantMode = has(mode) ? mode : wantKey?.mode || null;
   if (wantKey?.mode && has(mode) && wantKey.mode !== mode) throw new Error('"key" and "mode" disagree.');
+  if (has(form) && !FORM_TYPES.includes(form)) throw new Error('"form" must be "blues", "aaba" or "other".');
+  let styles = null;
+  if (has(style)) {
+    const q = normalizeTitle(requireString(style, "style", 30));
+    if (q.length < 3) throw new Error('"style" needs at least 3 letters.');
+    styles = matchStyles(q);
+  }
   if (!has(limit)) limit = FIND_DEFAULT_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error('"limit" must be a whole number from 1 to 10.');
 
+  if (styles && styles.size === 0) {
+    // Not a style the library uses: show the ones it does, instead of guessing.
+    return {
+      found: false,
+      total: 0,
+      known_styles: KNOWN_STYLES.slice(0, MAX_STYLES_LISTED),
+      message: KNOWN_STYLES.length
+        ? "No tunes in the chord library have that style. known_styles lists the styles it does have; offer the closest. Do not list tunes from memory."
+        : "The chord library has no style information. Offer to search by composer, key, mode or form instead. Do not list tunes from memory.",
+    };
+  }
+
   const matches = CHARTS.filter((c) => {
     if (who && !normalizeTitle(c.composer || "").includes(who)) return false;
+    if (styles && !styles.has(c.style)) return false;
+    if (has(form) && formType(c.form) !== form) return false;
     if (wantMode && c.mode !== wantMode) return false;
     if (wantKey) {
       const k = parseKey(c.key || "");
@@ -735,7 +783,7 @@ async function findTunes({ composer, key, mode, limit } = {}) {
     return true;
   }).sort((a, b) => a.title.localeCompare(b.title, "en", { sensitivity: "base" }));
 
-  const filters = [who && "composer", wantKey && "key", wantMode && "mode"].filter(Boolean);
+  const filters = [who && "composer", wantKey && "key", wantMode && "mode", styles && "style", has(form) && "form"].filter(Boolean);
   if (matches.length === 0) {
     return {
       found: false,
