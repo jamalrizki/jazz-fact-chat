@@ -256,6 +256,81 @@ function withChartMenu(chart, sheetEl) {
   return outer;
 }
 
+/* ---------- tune lists (find_tunes) ----------
+ * When the chat lists library tunes, each title gets "Show chart" and "Add to setlist".
+ * A tap asks chord_chart for that tune over /mcp (tune-picks.js), with no model involved,
+ * so the chart and the setlist entry are exactly what the chat would show for that title.
+ */
+
+function renderTunePicks(tunes) {
+  const card = h("div", "picks");
+  card.setAttribute("role", "group");
+  card.setAttribute("aria-label", "Tunes from the chord library");
+  const list = h("ul", "picks-list");
+  const shown = new Map(); // title → its rendered chart, so a second tap just scrolls to it
+  let lastChart = card; // charts appear under the list, in the order they were opened
+  const cache = new Map();
+  const getChart = async (title) => {
+    if (!cache.has(title)) {
+      const chart = await TunePicks.fetchChart(title, { url: `${WORKER_URL}/mcp`, fetchFn: fetch });
+      if (!chart) throw new Error("no chart");
+      cache.set(title, chart);
+    }
+    return cache.get(title);
+  };
+  const busy = async (btn, text, job) => {
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = text;
+    try {
+      await job();
+    } catch (err) {
+      console.error(err);
+      toast("Couldn't load that chart. Check your connection and try again.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  };
+
+  for (const t of tunes) {
+    const li = h("li", "pick");
+    const info = h("div", "pick-info");
+    info.append(h("span", "pick-title", t.title), h("span", "pick-meta", TunePicks.meta(t)));
+    const showBtn = h("button", "pick-btn", "Show chart");
+    const addBtn = h("button", "pick-btn", "Add to setlist");
+    showBtn.type = addBtn.type = "button";
+    showBtn.setAttribute("aria-label", `Show the chart for ${t.title}`);
+    addBtn.setAttribute("aria-label", `Add ${t.title} to the setlist`);
+    showBtn.addEventListener("click", () => {
+      if (shown.has(t.title)) { shown.get(t.title).scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+      busy(showBtn, "Loading…", async () => {
+        const el = renderSheetChart(await getChart(t.title));
+        lastChart.after(el);
+        lastChart = el;
+        shown.set(t.title, el);
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    addBtn.addEventListener("click", () =>
+      busy(addBtn, "Adding…", async () => {
+        const chart = await getChart(t.title);
+        if (inSetlist(chart)) { toast(`${chart.title} is already in the setlist`); return; }
+        setlist.charts.push(chart);
+        saveSetlist();
+        renderSetlist();
+        toast(`Added ${chart.title} · ${setlist.charts.length} in the setlist`);
+      })
+    );
+    const tools = h("div", "pick-tools");
+    tools.append(showBtn, addBtn);
+    li.append(info, tools);
+    list.append(li);
+  }
+  card.append(list);
+  return card;
+}
+
 /* the setlist panel */
 
 const setlistDialog = document.getElementById("setlist");
@@ -556,6 +631,7 @@ async function send(text) {
     pending.className = "msg assistant md";
     pending.innerHTML = renderMarkdown(data.reply); // safe: renderMarkdown escapes first
     for (const chart of data.charts || []) chatEl.appendChild(renderSheetChart(chart));
+    for (const tunes of TunePicks.cleanLists(data.tunes)) chatEl.appendChild(renderTunePicks(tunes));
     if (data.tools?.length) renderToolTrace(data.tools);
     history.push({ role: "assistant", content: data.reply });
     playStabs();

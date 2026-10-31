@@ -732,6 +732,30 @@ pre.code {
 .sheet-menu button:hover, .sheet-menu button:focus-visible { background: rgba(var(--red-rgb), 0.18); color: #fff; outline: none; }
 .sheet-menu button:disabled { opacity: 0.6; cursor: progress; }
 
+/* find_tunes list: each title with "Show chart" and "Add to setlist" */
+.picks {
+  align-self: stretch; padding: 6px 12px;
+  border: 1px solid rgba(var(--red-rgb), 0.45); border-radius: 10px;
+  background: var(--surface);
+}
+.picks-list { margin: 0; padding: 0; list-style: none; }
+.pick {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 9px 0;
+  border-bottom: 1px solid rgba(var(--white-rgb), 0.1);
+}
+.pick:last-child { border-bottom: 0; }
+.pick-info { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pick-title { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.pick-meta { color: var(--faint); font-size: 0.85rem; }
+.pick-tools { display: flex; gap: 6px; }
+.pick-btn {
+  min-height: 36px; padding: 6px 10px; border-radius: 6px;
+  border: 1px solid rgba(var(--red-rgb), 0.55); background: rgba(var(--red-rgb), 0.12);
+  color: var(--red-light); font-size: 0.85rem; white-space: nowrap;
+}
+.pick-btn:hover:not(:disabled), .pick-btn:focus-visible { color: #fff; box-shadow: 0 0 10px rgba(var(--red-rgb), 0.6); outline: none; }
+.pick-btn:disabled { opacity: 0.6; cursor: progress; }
+
 .setlist-btn {
   position: absolute; top: 12px; right: 0; z-index: 2;
   padding: 6px 10px 6px 12px; border-radius: 4px;

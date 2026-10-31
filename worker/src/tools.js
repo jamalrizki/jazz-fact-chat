@@ -808,6 +808,24 @@ async function findTunes({ composer, key, mode, style, form, limit } = {}) {
 }
 
 /**
+ * find_tunes results also go to the page, so each title gets "Show chart" and
+ * "Add to setlist" buttons (tune-picks.js). Only titles that really are in the
+ * library pass, so every button has a chart behind it. Returns null if none do.
+ * Used by the chat loop in index.js (kept here so tests can import it).
+ */
+const LIBRARY_TITLES = new Set(CHARTS.map((c) => c.title));
+const MAX_PICKS = 10;
+export function tuneListForPage(sc) {
+  if (!sc || sc.found !== true || !Array.isArray(sc.tunes)) return null;
+  const text = (v) => (typeof v === "string" ? v.slice(0, 60) : "");
+  const tunes = sc.tunes
+    .filter((t) => t && typeof t.title === "string" && LIBRARY_TITLES.has(t.title))
+    .slice(0, MAX_PICKS)
+    .map((t) => ({ title: t.title, key: text(t.key), form: text(t.form), style: text(t.style) }));
+  return tunes.length ? { tunes } : null;
+}
+
+/**
  * A found chord chart is split in two: the full chart for the page, and a short
  * summary for the model (it never sees the chords, so it can't garble them).
  * Used by the chat loop in index.js (kept here so tests can import it).

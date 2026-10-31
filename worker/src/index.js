@@ -23,7 +23,7 @@
 import { connect } from "./mcp-client.js";
 import { handleMcpHttp } from "./mcp.js";
 import { parseRetryWaitSeconds } from "./retry-wait.js";
-import { splitChartResult } from "./tools.js";
+import { splitChartResult, tuneListForPage } from "./tools.js";
 
 const MAX_MESSAGES = 20;
 const MAX_CHARS_PER_MESSAGE = 4000;
@@ -148,6 +148,7 @@ async function runConversation(messages, env) {
   let searches = 0;
   let bookSearches = 0;
   const charts = []; // chord charts go straight to the page, not through the model
+  const tuneLists = []; // find_tunes titles, shown on the page with "Show chart" / "Add to setlist"
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // On the final round, tool_choice "none" forces a text answer, and we say so explicitly:
@@ -184,7 +185,7 @@ async function runConversation(messages, env) {
       }
       reply = stripSourceTags(reply);
       if (!reply) throw new Error("Empty reply from model");
-      return { reply, provider, model, tools: trace, charts };
+      return { reply, provider, model, tools: trace, charts, tunes: tuneLists };
     }
 
     // The model asked for tools. First, record its request in the conversation:
@@ -225,6 +226,11 @@ async function runConversation(messages, env) {
         const split = splitChartResult(sc);
         charts.push(split.page);
         toModel = JSON.stringify(split.model);
+      }
+      // A find_tunes list also goes to the page as buttons. The model still gets the same result.
+      if (name === "find_tunes") {
+        const list = tuneListForPage(sc);
+        if (list) tuneLists.push(list);
       }
       convo.push({ role: "tool", tool_call_id: call.id, content: toModel });
       trace.push({
