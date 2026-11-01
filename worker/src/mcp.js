@@ -27,9 +27,13 @@ import { TOOLS, hasTool, isInternalOnly, publicDefinition, resultLimit, runTool,
 export const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
 
 const SERVER_INFO = { name: "jazz-fact-chat", title: "Jaizz Chat", version: "0.3.0" };
+// Sent to outside MCP clients in the initialize reply (our own chat loop doesn't pass it to the
+// model, so it costs no Groq tokens). Keep it in step with the public tools in tools.js.
 const INSTRUCTIONS =
-  "Jazz reference tools. Use album_lineup for album personnel and release years, " +
-  "lookup_musician for biographies, and random_jazz_fact for trivia.";
+  "Jazz reference tools. chord_chart: a tune's changes from the chord library, in any key or written for Bb, Eb or F instruments. " +
+  "find_tunes: library tunes by composer, key, mode, style or form. chord_voicings: chord tones, voicings and scales spelled in code. " +
+  "album_lineup: album personnel and release year. lookup_musician: biographies. search_jazz: anything else specific. " +
+  "random_jazz_fact: trivia. Copy chords and note names exactly as returned; never write them from memory.";
 const MAX_BODY_BYTES = 64 * 1024;
 
 // JSON-RPC 2.0 standard error codes
@@ -37,6 +41,7 @@ const PARSE_ERROR = -32700;
 const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
+const INTERNAL_ERROR = -32603;
 
 /* ---------- JSON-RPC layer ---------- */
 
@@ -58,8 +63,24 @@ export async function handleRpc(msg, env = {}, { internal = false } = {}) {
   // handshake. Acknowledge silently.
   if (msg.id === undefined) return null;
 
-  const { id, method, params = {} } = msg;
+  const { id, method } = msg;
+  // params is untrusted like everything else: "params": null or "params": "x" would otherwise
+  // crash the handler below (and, inside a batch, take the other messages down with it).
+  const params = msg.params === undefined ? {} : msg.params;
+  if (params === null || typeof params !== "object" || Array.isArray(params)) {
+    return rpcError(id, INVALID_PARAMS, "Invalid params: params must be an object");
+  }
 
+  try {
+    return await dispatch(id, method, params, env, internal);
+  } catch (err) {
+    // Last line of defence: one bad message gets a JSON-RPC error, never an uncaught throw.
+    console.error("mcp internal error:", err.message);
+    return rpcError(id, INTERNAL_ERROR, "Internal error");
+  }
+}
+
+async function dispatch(id, method, params, env, internal) {
   switch (method) {
     // 1. Handshake: agree on a version, declare capabilities.
     case "initialize": {

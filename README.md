@@ -45,7 +45,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 
 ## Use the MCP server
 
-Endpoint: `https://jazz-fact-chat.jamalrizki.workers.dev/mcp` (stateless Streamable HTTP, tools only, read-only, 7 public tools).
+Endpoint: `https://jazz-fact-chat.jamalrizki.workers.dev/mcp` (stateless Streamable HTTP, tools only, read-only, 7 public tools). The `initialize` reply's `instructions` say which tool to use for what. A malformed message (for example `"params": null`) gets a JSON-RPC error (`-32602`) instead of failing the request, and in a batch the other messages still get answered.
 
 ```bash
 curl -s https://jazz-fact-chat.jamalrizki.workers.dev/mcp \
@@ -127,6 +127,9 @@ worker/test/voicings.test.js     chord-spelling tests
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 worker/test/instrument-charts.test.js  charts for Bb, Eb and F instruments
 worker/test/setlist-print.test.js      setlist "Print for" switch, end to end through /mcp
+worker/test/find-tunes.test.js         find_tunes filters
+worker/test/named-scales.test.js       chord_voicings scale_name
+worker/test/mcp-robustness.test.js     /mcp: malformed messages and batches, server instructions
 rag/                             text extraction and chunking for the reference material
 ```
 
