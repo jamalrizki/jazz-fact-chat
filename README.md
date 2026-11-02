@@ -26,7 +26,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 
 - **The model never runs anything.** It returns `tool_calls`; the Worker runs them through MCP and sends the results back until the model answers (at most 4 tool rounds).
 - **Tools are defined once** (`worker/src/tools.js`, MCP-native `inputSchema`). The same definitions serve outside MCP clients at `/mcp` and the app's own chat loop. `mcp-client.js` converts them to the OpenAI function format the LLM providers expect.
-- **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags from replies.
+- **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags and "According to Wikipedia, …" phrases from replies.
 - **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two.
 - **The setlist calls the MCP server directly.** Its "Print for" switch (concert, Bb, Eb, F) sends one JSON-RPC batch of `chord_chart` `tools/call`s to `/mcp` (`setlist-print.js`), with no model in the loop, so the page never transposes anything itself.
 
@@ -114,16 +114,18 @@ charts.js                        chart row layout (shared) and PDF export (jsPDF
 setlist-print.js                 setlist "Print for" switch: re-asks chord_chart over /mcp for another instrument
 docs.html, docs.js               "How it works" page (tool list loaded live via tools/list)
 config.js                        Worker URL (local vs deployed)
-worker/src/index.js              chat endpoint, system prompt, tool-use loop, provider fallback, source-tag filter
+worker/src/index.js              chat endpoint, system prompt, tool-use loop, provider fallback
 worker/src/mcp.js                hand-written MCP server (JSON-RPC 2.0); hides internal-only tools from /mcp
 worker/src/mcp-client.js         in-process MCP client + MCP → OpenAI tool conversion
 worker/src/tools.js              tool definitions and implementations
 worker/src/voicings.js           chord-symbol grammar and note spelling (chord_voicings)
 worker/src/books.js              reference search: embed, vector search, rerank, pick passages
 worker/src/retry-wait.js         reads Groq's "try again in …" waits (435ms, 11.2s, 1m5.2s)
+worker/src/source-tags.js        removes "(Source: …)" tags and "According to …" phrases from replies
 worker/scripts/import-charts.mjs chart export → chord library
 worker/scripts/embed-books.mjs   reference chunks → vectors (Workers AI)
 worker/test/voicings.test.js     chord-spelling tests
+worker/test/source-tags.test.js  replies never name their sources
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 worker/test/instrument-charts.test.js  charts for Bb, Eb and F instruments
 worker/test/setlist-print.test.js      setlist "Print for" switch, end to end through /mcp

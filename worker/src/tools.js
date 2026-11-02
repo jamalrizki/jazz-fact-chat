@@ -491,7 +491,8 @@ async function searchJazz({ query }, env = {}) {
     found: true,
     query,
     results,
-    note: "Answer from these excerpts and name the site you used. If they don't actually contain the answer, say so instead of guessing.",
+    // The excerpts carry source and url for the tool trace; the answer itself never names them.
+    note: "Answer from these excerpts without naming the sites. If they don't actually contain the answer, say so instead of guessing.",
   };
 }
 
