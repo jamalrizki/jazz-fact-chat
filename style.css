@@ -697,6 +697,7 @@ pre.code {
 .ch .rt { font-weight: 700; font-size: 1.45rem; }
 .ch .rt.nc { font-size: 0.95rem; }
 .ch .ac { font-weight: 700; font-size: 0.85rem; vertical-align: 0.6em; margin-left: 1px; }
+.ch .ac.pre { margin-left: 0; margin-right: 1px; }
 .ch .ql { font-weight: 700; font-size: 0.8rem; margin-left: 1px; }
 .ch .bs { display: block; font-weight: 700; font-size: 0.75rem; margin-left: 6px; color: #f3d6d7; }
 .rpt { font: 700 1.5rem/1 "Roboto Condensed", var(--font-body); color: var(--chord); margin-left: 30%; }

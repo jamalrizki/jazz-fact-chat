@@ -41,9 +41,13 @@
   }
 
   // "Bb-7/F" style symbols → parts, or null for anything that isn't a chord (N.C. etc.).
+  // Roman numerals from chord_chart's numerals option ("bVIImaj7") come back with the
+  // accidental in `pre`, since it's written before the numeral.
   function parseChord(sym) {
     const m = String(sym).match(/^([A-G])([b#]?)(.*?)(?:\/([A-G])([b#]?))?$/);
-    return m ? { root: m[1], acc: m[2], q: m[3], bass: m[4], bassAcc: m[5] } : null;
+    if (m) return { root: m[1], acc: m[2], q: m[3], bass: m[4], bassAcc: m[5] };
+    const n = String(sym).match(/^([b#]?)(VII|VI|IV|V|III|II|I)(.*?)(?:\/([A-G])([b#]?))?$/);
+    return n ? { pre: n[1], root: n[2], acc: "", q: n[3], bass: n[4], bassAcc: n[5] } : null;
   }
 
   /* ---------- PDF ---------- */
@@ -151,6 +155,12 @@
     }
     let cx = x;
     doc.setFontSize(size);
+    if (p.pre) {
+      const h = size * PT * 0.4;
+      const raise = size * PT * 0.36;
+      if (!measure) (p.pre === "b" ? flat : sharp)(doc, cx, yb - raise, h);
+      cx += (p.pre === "b" ? 0.66 * h : 0.82 * h) + 0.2;
+    }
     if (!measure) doc.text(p.root, cx, yb);
     cx += doc.getTextWidth(p.root) + 0.15;
     if (p.acc) {

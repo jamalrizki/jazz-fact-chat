@@ -133,6 +133,10 @@ export const TOOLS = [
           enum: INSTRUMENTS,
           description: "For a horn player: Bb (trumpet, tenor, soprano, clarinet), Eb (alto, bari), F (French horn). Returns their written key; key stays concert.",
         },
+        numerals: {
+          type: "boolean",
+          description: "true for the changes in numbers: Roman numerals against the key (IIm7 V7 Imaj7).",
+        },
       },
       required: ["tune"],
       additionalProperties: false,
@@ -571,6 +575,28 @@ function transposeChord(chord, semis, names) {
   return bass ? `${out}/${names[(noteToPc(bass, bassAcc) + semis + 12) % 12]}` : out;
 }
 
+// Roman numerals: the chord root's distance from the tonic, named against the tonic's major
+// scale (minor tunes too, so G minor's Bb is bIII). Degree comes from the letter names, so F#
+// in C is #IV and Gb in C is bV; a spelling that would give an odd name (#VII, bIV) falls back
+// to the usual one for that distance. The chord's own quality and any bass note stay as written.
+const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII"];
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
+const NUMERAL_NAMES = [["I"], ["bII", "#I"], ["II"], ["bIII", "#II"], ["III"], ["IV"], ["#IV", "bV"], ["V"], ["bVI", "#V"], ["VI"], ["bVII", "#VI"], ["VII"]];
+const LETTERS = "CDEFGAB";
+
+export function toNumeral(chord, tonic) {
+  const m = chord.match(/^([A-G])([b#]?)(.*?)(?:\/([A-G][b#]?))?$/);
+  if (!m) return chord; // N.C. and anything unexpected pass through
+  const [, root, acc, quality, bass] = m;
+  const t = tonic.match(/^([A-G])([b#]?)$/);
+  const semis = (noteToPc(root, acc) - noteToPc(t[1], t[2]) + 12) % 12;
+  const degree = (LETTERS.indexOf(root) - LETTERS.indexOf(t[1]) + 7) % 7;
+  const diff = ((semis - MAJOR_STEPS[degree] + 18) % 12) - 6;
+  const byLetter = (diff === -1 ? "b" : diff === 1 ? "#" : diff === 0 ? "" : "?") + NUMERALS[degree];
+  const allowed = NUMERAL_NAMES[semis];
+  return (allowed.includes(byLetter) ? byLetter : allowed[0]) + quality + (bass ? `/${bass}` : "");
+}
+
 function normalizeTitle(s) {
   return String(s)
     .toLowerCase()
@@ -619,8 +645,10 @@ function suggestCharts(tune) {
   return scored.slice(0, 8).map((x) => x.title);
 }
 
-async function chordChart({ tune, key, instrument }) {
+async function chordChart({ tune, key, instrument, numerals }) {
   tune = requireString(tune, "tune", 100);
+  if (numerals === undefined || numerals === null) numerals = false;
+  if (typeof numerals !== "boolean") throw new Error(`"numerals" must be true or false.`);
   // Validate before the lookup, and never echo the caller's text back.
   if (instrument === undefined || instrument === null || instrument === "") instrument = "concert";
   if (typeof instrument !== "string" || !Object.hasOwn(INSTRUMENT_OFFSET, instrument)) {
@@ -655,7 +683,13 @@ async function chordChart({ tune, key, instrument }) {
   const names = useSharps ? SHARP_NAMES : FLAT_NAMES;
   const keyName = semis === 0 ? chart.key : names[target.pc];
 
-  const tx = (c) => (semis === 0 ? c : transposeChord(c, semis, names));
+  // Numerals are the same in every key, so they're worked out from the library's own spelling
+  // in its own key (a transposed spelling could flip #I to bII). The result names the tonic
+  // of the key asked for, which is what the player counts from.
+  const tonic = keyName;
+  const tx = numerals
+    ? (c) => toNumeral(c, original.name)
+    : (c) => (semis === 0 ? c : transposeChord(c, semis, names));
   const sections = chart.sections.map((sec) => ({
     label: sec.label,
     bars: sec.bars.map((bar) => bar.split(" ").map(tx).join(" ")),
@@ -666,7 +700,7 @@ async function chordChart({ tune, key, instrument }) {
 
   const totalBars = sections.reduce((n, s) => n + s.bars.length, 0);
   const keyLabel = `${keyName} ${chart.mode}`;
-  const lines = [`${chart.title} (${chart.composer}) · ${keyLabel} · ${chart.form}`];
+  const lines = [`${chart.title} (${chart.composer}) · ${keyLabel}${numerals ? ` · numerals from ${tonic}` : ""} · ${chart.form}`];
   for (const sec of sections) {
     for (let i = 0; i < sec.bars.length; i += 4) {
       const label = (i === 0 ? sec.label : "").padEnd(2, " ");
@@ -682,6 +716,7 @@ async function chordChart({ tune, key, instrument }) {
     key: keyLabel,
     transposed: semis !== 0,
     ...(offset ? { instrument, concert_key: `${concertName} ${chart.mode}` } : {}),
+    ...(numerals ? { numerals: true, numerals_from: tonic } : {}),
     form: chart.form,
     bars: totalBars,
     chart_text: lines.join("\n"),
@@ -815,7 +850,8 @@ async function findTunes({ composer, key, mode, style, form, limit } = {}) {
  */
 export function splitChartResult(sc) {
   // For a transposing instrument the chart header says so, so nobody reads it as concert.
-  const pageKey = sc.instrument ? `${sc.key}, for ${sc.instrument} instruments` : sc.key;
+  // ", in numbers" goes before the instrument suffix, which setlist-print.js reads from the end.
+  const pageKey = sc.key + (sc.numerals ? ", in numbers" : "") + (sc.instrument ? `, for ${sc.instrument} instruments` : "");
   // concert_key lets the setlist re-ask for the same chart for another instrument (setlist-print.js).
   const concertKey = sc.concert_key || sc.key;
   return {
@@ -823,8 +859,10 @@ export function splitChartResult(sc) {
     model: {
       found: true, title: sc.title, composer: sc.composer, key: sc.key,
       ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),
+      ...(sc.numerals ? { numerals: true, numerals_from: sc.numerals_from } : {}),
       form: sc.form, bars: sc.bars,
       note: "The full chart is displayed to the user automatically. Do not write out the chords." +
+        (sc.numerals ? " It is shown in Roman numerals counted from numerals_from; don't write out or analyze the numerals yourself." : "") +
         (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : ""),
     },
   };
