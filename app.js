@@ -71,7 +71,8 @@ function sheetChord(sym) {
   const span = h("span", "ch");
   const p = ChartSheet.parseChord(sym);
   if (!p) { span.append(h("span", "rt nc", sym)); return span; }
-  const { root, acc, q, bass, bassAcc } = p;
+  const { pre, root, acc, q, bass, bassAcc } = p;
+  if (pre) span.append(h("span", "ac pre", pre === "b" ? "♭" : "♯")); // numerals: bVII7
   span.append(h("span", "rt", root));
   if (acc) span.append(h("span", "ac", acc === "b" ? "♭" : "♯"));
   if (q) span.append(h("span", "ql", sheetQuality(q)));

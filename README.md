@@ -37,7 +37,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | `lookup_musician` | Wikipedia | Quick bios |
 | `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players) |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
-| `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key, or written for Bb, Eb or F instruments (`instrument`; `key` stays the concert key) |
+| `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key, or written for Bb, Eb or F instruments (`instrument`; `key` stays the concert key), or in Roman numerals against the key (`numerals: true`, computed in code; same in every key) |
 | `find_tunes` | Chord library metadata | Lists library tunes by composer, key, mode, style and/or form ("Miles Davis tunes", "bossas", "minor blues"), up to 10 titles with key, form and style. Style only matches styles the library actually has (otherwise it returns that list); form is blues, AABA or other, worked out from the chart's form. Filtering is done in code, so every title has a chart; never returns chords |
 | `chord_voicings` | Code (`voicings.js`) | Notes of any chord symbol: chord tones, inversions, rootless form, optional chord-scale, checking notes against a chord; any named scale on any root (`scale_name`: modes, harmonic/melodic minor, altered, diminished, pentatonic, blues, bebop) |
 | `random_jazz_fact` | Local JSON | Trivia |
