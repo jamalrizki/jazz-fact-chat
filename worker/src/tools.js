@@ -597,6 +597,58 @@ export function toNumeral(chord, tonic) {
   return (allowed.includes(byLetter) ? byLetter : allowed[0]) + quality + (bass ? `/${bass}` : "");
 }
 
+// ii–V pairs, found in code so the model never has to spot them: a minor seventh (m7, m9, m11,
+// m7b5, m9b5) followed by a dominant (7, 9, 11, 13 and their alterations or sus) a fourth up.
+// The target is a fourth above the V; it "resolves" when the next chord's root is that note.
+// Chords are read in the order the sections are played, across bar and section lines, and the
+// last chord leads back to the first (the form repeats), so a turnaround resolves to the top.
+// The same ii–V played twice in a row (Dm7 G7 Dm7 G7) counts once, over both bars.
+const MINOR_II = /^m(7|9|11)(b5)?$/;
+const DOMINANT_V = /^(7|9|11|13)/;
+
+function splitRoot(chord) {
+  const m = chord.match(/^([A-G])([b#]?)(.*?)(?:\/[A-G][b#]?)?$/);
+  return m ? { letter: m[1], acc: m[2], quality: m[3], pc: noteToPc(m[1], m[2]) } : null;
+}
+
+export function findTwoFives(sections, tonic) {
+  const stream = [];
+  let bar = 0;
+  for (const sec of sections) for (const b of sec.bars) { bar++; for (const c of b.split(" ")) if (c) stream.push({ c, bar }); }
+  const out = [];
+  for (let i = 0; i + 1 < stream.length; i++) {
+    const start = i;
+    while (stream[i + 2]?.c === stream[i].c && stream[i + 3]?.c === stream[i + 1].c) i += 2;
+    const ii = splitRoot(stream[i].c), v = splitRoot(stream[i + 1].c);
+    if (!ii || !v || !MINOR_II.test(ii.quality) || !DOMINANT_V.test(v.quality) || (v.pc - ii.pc + 12) % 12 !== 5) continue;
+    // Spell the target a fourth (three letters) above the V, so Bb7 points to Eb, not D#.
+    const letter = LETTERS[(LETTERS.indexOf(v.letter) + 3) % 7];
+    const targetPc = (v.pc + 5) % 12;
+    const shift = ((targetPc - PITCH[letter] + 18) % 12) - 6;
+    const target = toNumeral(letter + (shift === -1 ? "b" : shift === 1 ? "#" : ""), tonic);
+    const next = splitRoot((stream[i + 2] || stream[0]).c);
+    const a = stream[start].bar, b = stream[i + 1].bar;
+    out.push({
+      bars: a === b ? String(a) : `${a}–${b}`,
+      chords: [toNumeral(stream[i].c, tonic), toNumeral(stream[i + 1].c, tonic)],
+      into: target,
+      resolves: !!next && next.pc === targetPc,
+    });
+  }
+  return out;
+}
+
+// For the model: one short line per target, e.g. "into bIII (bars 1–2, 9–10)", so it can say
+// where the ii–Vs go without ever seeing the chords themselves.
+function summarizeTwoFives(list) {
+  const groups = new Map();
+  for (const t of list) {
+    const k = t.into + (t.resolves ? "" : ", unresolved");
+    groups.set(k, [...(groups.get(k) || []), t.bars]);
+  }
+  return [...groups].map(([k, bars]) => `into ${k} (bar${bars.length > 1 || bars[0].includes("–") ? "s" : ""} ${bars.join(", ")})`);
+}
+
 function normalizeTitle(s) {
   return String(s)
     .toLowerCase()
@@ -716,7 +768,7 @@ async function chordChart({ tune, key, instrument, numerals }) {
     key: keyLabel,
     transposed: semis !== 0,
     ...(offset ? { instrument, concert_key: `${concertName} ${chart.mode}` } : {}),
-    ...(numerals ? { numerals: true, numerals_from: tonic } : {}),
+    ...(numerals ? { numerals: true, numerals_from: tonic, two_fives: findTwoFives(chart.sections, original.name) } : {}),
     form: chart.form,
     bars: totalBars,
     chart_text: lines.join("\n"),
@@ -859,10 +911,11 @@ export function splitChartResult(sc) {
     model: {
       found: true, title: sc.title, composer: sc.composer, key: sc.key,
       ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),
-      ...(sc.numerals ? { numerals: true, numerals_from: sc.numerals_from } : {}),
+      ...(sc.numerals ? { numerals: true, numerals_from: sc.numerals_from, two_fives: summarizeTwoFives(sc.two_fives || []) } : {}),
       form: sc.form, bars: sc.bars,
       note: "The full chart is displayed to the user automatically. Do not write out the chords." +
-        (sc.numerals ? " It is shown in Roman numerals counted from numerals_from; don't write out or analyze the numerals yourself." : "") +
+        (sc.numerals ? " It is shown in Roman numerals counted from numerals_from; don't write out or analyze the numerals yourself." +
+          " two_fives lists the ii–Vs found in code and where they lead; you may mention those, exactly as given" : "") +
         (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : ""),
     },
   };
