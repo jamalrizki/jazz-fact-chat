@@ -8,6 +8,9 @@
   const INSTRUMENTS = ["concert", "Bb", "Eb", "F"];
   const SAVED = "saved"; // print every chart as it was saved (the default)
   const FOR_SUFFIX = /, for (Bb|Eb|F) instruments$/;
+  // A chart in Roman numerals ("G minor, in numbers"). The numbers are the same for every
+  // instrument, so printing it for another one must ask for numbers again, not letter chords.
+  const IN_NUMBERS = /, in numbers(?:, for (?:Bb|Eb|F) instruments)?$/;
   const KEY_ROOT = /^[A-G][b#]?$/;
   const BATCH = 20; // the Worker's /mcp accepts at most 20 messages per batch
 
@@ -25,6 +28,10 @@
     return null;
   }
 
+  function inNumbers(chart) {
+    return typeof chart.key === "string" && IN_NUMBERS.test(chart.key);
+  }
+
   // One tools/call per chart that needs a different written key. `id` is the chart's index.
   function planRequests(charts, instrument) {
     const requests = [];
@@ -34,12 +41,9 @@
       if (writtenFor(c) === instrument) return; // already right
       const rootName = (concertKeyOf(c) || "").split(" ")[0];
       if (!KEY_ROOT.test(rootName)) { unknown.push(i); return; }
-      requests.push({
-        jsonrpc: "2.0",
-        id: i,
-        method: "tools/call",
-        params: { name: "chord_chart", arguments: { tune: c.title, key: rootName, instrument } },
-      });
+      const args = { tune: c.title, key: rootName, instrument };
+      if (inNumbers(c)) args.numerals = true;
+      requests.push({ jsonrpc: "2.0", id: i, method: "tools/call", params: { name: "chord_chart", arguments: args } });
     });
     return { requests, unknown };
   }
@@ -52,10 +56,13 @@
     if (!sc || sc.found !== true || sc.title !== asked.title) return null;
     if (typeof sc.key !== "string" || !sc.layout || !Array.isArray(sc.layout.bars)) return null;
     if (sc.instrument !== undefined && !INSTRUMENTS.includes(sc.instrument)) return null;
+    // A numbers chart must come back in numbers (and a letter chart in letters).
+    if ((sc.numerals === true) !== inNumbers(asked)) return null;
     return {
       title: sc.title,
       composer: sc.composer,
-      key: sc.instrument ? `${sc.key}, for ${sc.instrument} instruments` : sc.key,
+      // Same header the chat gives (splitChartResult in worker/src/tools.js).
+      key: sc.key + (sc.numerals ? ", in numbers" : "") + (sc.instrument ? `, for ${sc.instrument} instruments` : ""),
       concert_key: sc.concert_key || sc.key,
       form: sc.form,
       style: sc.layout.style ?? null,
@@ -92,5 +99,5 @@
     return instrument === "concert" ? "concert" : INSTRUMENTS.includes(instrument) ? `for ${instrument}` : "";
   }
 
-  root.SetlistPrint = { INSTRUMENTS, SAVED, writtenFor, concertKeyOf, planRequests, chartFromReply, chartsFor, label };
+  root.SetlistPrint = { INSTRUMENTS, SAVED, writtenFor, inNumbers, concertKeyOf, planRequests, chartFromReply, chartsFor, label };
 })(typeof window !== "undefined" ? window : globalThis);

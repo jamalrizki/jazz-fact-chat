@@ -141,3 +141,37 @@ test("cover and file name label", () => {
   assert.equal(SP.label(SP.SAVED), "");
   assert.equal(SP.label("tenor"), "");
 });
+
+test("a chart saved in numbers stays in numbers when printed for another instrument", async () => {
+  const numbers = await saved({ tune: "Autumn Leaves", numerals: true });
+  assert.equal(SP.inNumbers(numbers), true);
+  assert.equal(SP.inNumbers(await saved({ tune: "Autumn Leaves" })), false);
+
+  const plan = SP.planRequests([numbers], "Bb");
+  assert.equal(plan.requests[0].params.arguments.numerals, true);
+
+  const { charts, kept } = await SP.chartsFor([numbers, await saved({ tune: "Blue Bossa" })], "Bb", opts);
+  assert.deepEqual(plain(kept), []);
+  // Same as asking the chat for it in numbers for Bb, bar for bar; the letter chart stays letters.
+  assert.deepEqual(plain(charts[0]), await saved({ tune: "Autumn Leaves", numerals: true, instrument: "Bb" }));
+  assert.equal(charts[0].key, "A minor, in numbers, for Bb instruments");
+  assert.equal(charts[0].bars[0].c[0], "IVm7", "numbers, never letter chords");
+  assert.equal(charts[1].key, "D minor, for Bb instruments");
+  assert.equal(charts[1].bars[0].c[0].startsWith("Dm"), true);
+
+  // And back to concert from a Bb numbers chart.
+  const tenorNumbers = await saved({ tune: "Autumn Leaves", numerals: true, instrument: "Bb" });
+  const back = await SP.chartsFor([tenorNumbers], "concert", opts);
+  assert.deepEqual(plain(back.charts[0]), numbers);
+});
+
+test("a reply that drops (or adds) the numbers is not swapped in", () => {
+  const sc = { found: true, title: "Autumn Leaves", key: "A minor", instrument: "Bb", concert_key: "G minor", layout: { style: null, bars: [] } };
+  const letters = { result: { isError: false, structuredContent: sc } };
+  const numbers = { result: { isError: false, structuredContent: { ...sc, numerals: true } } };
+  const askedNumbers = { title: "Autumn Leaves", key: "G minor, in numbers" };
+  const askedLetters = { title: "Autumn Leaves", key: "G minor" };
+  assert.equal(SP.chartFromReply(letters, askedNumbers), null);
+  assert.equal(SP.chartFromReply(numbers, askedLetters), null);
+  assert.equal(SP.chartFromReply(numbers, askedNumbers).key, "A minor, in numbers, for Bb instruments");
+});
