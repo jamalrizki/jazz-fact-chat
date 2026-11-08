@@ -193,7 +193,8 @@ function chooseScale(degrees) {
     const flat9 = has("b9"), sharp9 = has("#9"), sharp11 = has("#11"), flat13 = has("b13") || has("#5");
     // Phrygian dominant keeps the natural 5th, so only b9 + b13 with nothing else altered (C7#5b9 is altered).
     if (flat9 && has("b13") && !has("#5") && !has("b5") && !sharp9 && !sharp11) pick = ["Phrygian dominant", ["1", "b9", "3", "11", "5", "b13", "b7"]];
-    else if ((flat9 || sharp9) && (flat13 || sharp11 || has("b5"))) pick = ["altered", ["1", "b9", "#9", "3", "#11", "b13", "b7"]];
+    // The altered scale has no natural 5th, so a chord that keeps its 5th (C7b9#11, C13#11b9) is half-whole instead.
+    else if ((flat9 || sharp9) && (flat13 || has("b5") || (sharp11 && !has("5")))) pick = ["altered", ["1", "b9", "#9", "3", "#11", "b13", "b7"]];
     else if (flat9 || sharp9) pick = ["half-whole diminished", ["1", "b9", "#9", "3", "#11", "5", "13", "b7"]];
     else if (has("#5") || has("b5")) pick = ["whole tone", ["1", "9", "3", "#11", "#5", "b7"]]; // 7#5 and 7b5
     else if (has("b13")) pick = ["Mixolydian ♭13", ["1", "9", "3", "11", "5", "b13", "b7"]];
@@ -205,10 +206,27 @@ function chooseScale(degrees) {
     else pick = ["major (Ionian)", ["1", "9", "3", "11", "5", "13", "7"]];
   }
   if (!pick) return null;
-  // Spell the scale's #5/b13 the way the chord does (C7#5 has G#, so its scale does too).
   let [name, list] = pick;
-  if (has("#5") && !has("b13")) list = list.map((d) => (d === "b13" ? "#5" : d));
+  const pcOf = (d) => DEGREES[d][1] % 12;
+  // A scale that leaves out one of the chord's own notes (C7sus4b9 has no 4th in half-whole) is no answer: say there is no default.
+  if (!degrees.every((cd) => list.some((d) => pcOf(d) === pcOf(cd)))) return null;
+  // Spell every scale note the way the chord spells it (C7#5 has G#, C7b5 has Gb, so their scales do too).
+  list = list.map((d) => degrees.find((cd) => pcOf(cd) === pcOf(d)) ?? d);
   return [name, list];
+}
+
+/**
+ * Spell a chosen scale. One case needs the root: whole tone over a 7b5 chord, where the
+ * scale's #5 isn't a chord tone. It is written as b13 when that is no harder to read
+ * (C7b5: C D E Gb Ab Bb, F#7b5: ... C D E), and kept as #5 when b13 would need a
+ * double flat (Db7b5: ... Abb A Cb, not Abb Bbb Cb).
+ */
+function spellScale(list, degrees, spell) {
+  const accs = (note) => note.length - 1;
+  return list.map((d) => {
+    if (d === "#5" && list.includes("b5") && !degrees.includes("#5") && accs(spell("b13")) <= accs(spell("#5"))) return spell("b13");
+    return spell(d);
+  });
 }
 
 /* ---------- named scales ---------- */
@@ -327,15 +345,17 @@ function describe(letter, root, rootPc, quality, bass, { scale = false, checkNot
   }
 
   const chosen = scale || checkNotes.length ? chooseScale(degrees) : null;
+  const scaleNotes = chosen ? spellScale(chosen[1], degrees, spell) : [];
   if (scale) {
-    result.scale = chosen ? { name: chosen[0], text: prettyList(chosen[1].map(spell)) } : null;
+    result.scale = chosen ? { name: chosen[0], text: prettyList(scaleNotes) } : null;
   }
 
   if (checkNotes.length) {
     const candidates = tones.map((t) => ({ ...t, kind: t.degree === "1" ? "root" : "chord_tone" }));
-    for (const d of chosen ? chosen[1] : []) {
-      const note = spell(d);
-      if (!candidates.some((c) => notePc(c.note) === notePc(note))) candidates.push({ degree: d, note, kind: "scale_tone" });
+    for (const [i, d] of (chosen ? chosen[1] : []).entries()) {
+      const note = scaleNotes[i];
+      const degree = note === spell(d) ? d : "b13"; // the whole-tone respelling above
+      if (!candidates.some((c) => notePc(c.note) === notePc(note))) candidates.push({ degree, note, kind: "scale_tone" });
     }
     result.checked_notes = checkNotes.map((n) => {
       const exact = candidates.find((c) => c.note === n);

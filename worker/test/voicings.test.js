@@ -133,7 +133,7 @@ test("chord-scales: the usual textbook pairing", () => {
     C7alt: "altered: C D♭ D♯ E F♯ A♭ B♭",
     "C7#5b9": "altered: C D♭ D♯ E F♯ G♯ B♭",
     "C7#5": "whole tone: C D E F♯ G♯ B♭",
-    C7b5: "whole tone: C D E F♯ G♯ B♭",
+    C7b5: "whole tone: C D E G♭ A♭ B♭", // spelled like the chord's G♭
     C7b13: "Mixolydian ♭13: C D E F G A♭ B♭",
     Ebmaj7: "major (Ionian): E♭ F G A♭ B♭ C D",
     A7: "Mixolydian: A B C♯ D E F♯ G",
@@ -142,6 +142,42 @@ test("chord-scales: the usual textbook pairing", () => {
   for (const [symbol, expected] of Object.entries(cases)) assert.equal(scaleOf(symbol), expected, symbol);
   for (const symbol of ["Cdim", "Csus4", "C5"]) assert.equal(scaleOf(symbol), null, symbol); // no single default
   assert.equal(chordVoicings({ chord: "Cmaj7" }).scale, undefined); // only when asked
+});
+
+test("chord-scales never contradict the chord: same notes, same spelling", () => {
+  // The chord's b5 is spelled as the chord spells it (was F♯ in the scale but G♭ in the chord).
+  assert.equal(scaleOf("Cmaj7b5"), "Lydian: C D E G♭ G A B");
+  assert.equal(scaleOf("C7b5b9"), "altered: C D♭ D♯ E G♭ A♭ B♭");
+  assert.equal(scaleOf("F#7b5"), "whole tone: F♯ G♯ A♯ C D E"); // not B♯ and C♯♯
+  assert.equal(scaleOf("Db7b5"), "whole tone: D♭ E♭ F A♭♭ A C♭"); // A, not B♭♭
+  // A chord that keeps its natural 5th gets half-whole, not altered (which has no 5th).
+  assert.equal(scaleOf("C7b9#11"), "half-whole diminished: C D♭ D♯ E F♯ G A B♭");
+  assert.equal(scaleOf("C13b9#11"), "half-whole diminished: C D♭ D♯ E F♯ G A B♭");
+  // No scale in the table holds every note of these, so no default instead of a wrong one.
+  for (const symbol of ["C7sus4b9", "C7sus4#5", "Cm7#5", "C7b9#11b13"]) assert.equal(scaleOf(symbol), null, symbol);
+  assert.equal(chordVoicings({ chord: "C7sus4b9", check_notes: ["E"] }).checked_against, "chord tones only");
+
+  // check_notes agrees with the scale it shows.
+  const r = chordVoicings({ chord: "C7b5", check_notes: ["Gb", "F#", "Ab", "G#"] });
+  assert.deepEqual(r.checked_notes, [
+    { note: "Gb", status: "chord_tone", degree: "b5" },
+    { note: "F#", status: "wrong_spelling", should_be: "Gb", degree: "b5" },
+    { note: "Ab", status: "scale_tone", degree: "b13" },
+    { note: "G#", status: "wrong_spelling", should_be: "Ab", degree: "b13" },
+  ]);
+
+  // Sweep: whenever a scale is returned, every chord tone is in it, spelled the same way.
+  const pretty = (n) => n[0] + n.slice(1).replace(/#/g, "♯").replace(/b/g, "♭");
+  const qualities = ["6", "m6", "6/9", "maj7", "maj9", "maj13", "maj7#11", "maj7#5", "maj7b5", "m7", "m9", "m11", "m13", "m(maj7)", "m7b5", "m9b5", "m7b9", "m7b13", "dim7", "7", "9", "11", "13", "7sus4", "9sus4", "13sus4", "7b9", "7#9", "7#11", "7b13", "7b5", "7#5", "7b9b13", "7#5b9", "7b5b9", "7#9b5", "7b9#11", "13b9", "13#11", "7alt", "aug7"];
+  for (const root of ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]) {
+    for (const q of qualities) {
+      const symbol = root + q;
+      const res = chordVoicings({ chord: symbol, scale: true });
+      if (!res.scale) continue;
+      const scaleNotes = res.scale.text.split(" ");
+      for (const { note } of res.chord_tones) assert.ok(scaleNotes.includes(pretty(note)), `${symbol}: ${note} missing from ${res.scale.text}`);
+    }
+  }
 });
 
 test("check_notes: chord tones, scale tones, wrong spellings, outside notes", () => {
