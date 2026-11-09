@@ -139,3 +139,22 @@ test("chord_chart definition: numerals is a boolean and the definition stays sma
   assert.deepEqual(t.inputSchema.required, ["tune"]);
   assert.ok(JSON.stringify({ d: t.description, s: t.inputSchema }).length < 1300);
 });
+
+test("slash chords: the bass note is spelled in the key asked for (and the instrument's written key)", async () => {
+  // The sample library has no slash chords, so add a small made-up one for this test only.
+  const { default: CHARTS } = await import("../src/chord-charts.json", { with: { type: "json" } });
+  CHARTS.push({ title: "Zz Slash Fixture", composer: "Test", key: "C", mode: "major", form: "AABA, 32 bars",
+    sections: [{ label: "A", bars: ["Cmaj7/E", "F/A", "G7/B", "Ebmaj7/G N.C."] }] });
+  const nums = async (args) => chords(await chart({ tune: "Zz Slash Fixture", numerals: true, ...args }));
+  assert.deepEqual(await nums({}), ["Imaj7/E", "IV/A", "V7/B", "bIIImaj7/G", "N.C."], "own key: as written");
+  assert.deepEqual(await nums({ key: "F" }), ["Imaj7/A", "IV/D", "V7/E", "bIIImaj7/C", "N.C."]);
+  assert.deepEqual(await nums({ key: "Db" }), ["Imaj7/F", "IV/Bb", "V7/C", "bIIImaj7/Ab", "N.C."], "flat key: flat names");
+  assert.deepEqual(await nums({ key: "E" }), ["Imaj7/G#", "IV/C#", "V7/D#", "bIIImaj7/B", "N.C."], "sharp key: sharp names");
+  const r = await chart({ tune: "Zz Slash Fixture", key: "F", instrument: "Bb", numerals: true });
+  assert.equal(r.numerals_from, "G");
+  assert.deepEqual(chords(r), ["Imaj7/B", "IV/E", "V7/F#", "bIIImaj7/D", "N.C."], "Bb instrument reads in G");
+  assert.match(r.chart_text, /\| Imaj7\/B \| IV\/E \| V7\/F# \|/);
+  // Same numerals in every key; only the bass letter moves.
+  const strip = (cs) => cs.map((c) => c.replace(/\/[A-G][b#]?$/, ""));
+  assert.deepEqual(strip(await nums({ key: "A" })), strip(await nums({})));
+});

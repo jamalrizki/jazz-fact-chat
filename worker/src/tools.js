@@ -578,13 +578,14 @@ function transposeChord(chord, semis, names) {
 // Roman numerals: the chord root's distance from the tonic, named against the tonic's major
 // scale (minor tunes too, so G minor's Bb is bIII). Degree comes from the letter names, so F#
 // in C is #IV and Gb in C is bV; a spelling that would give an odd name (#VII, bIV) falls back
-// to the usual one for that distance. The chord's own quality and any bass note stay as written.
+// to the usual one for that distance. The chord's own quality stays as written; the bass note
+// stays a note name, passed through `bassName` so it can be spelled in the key the player reads.
 const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII"];
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 const NUMERAL_NAMES = [["I"], ["bII", "#I"], ["II"], ["bIII", "#II"], ["III"], ["IV"], ["#IV", "bV"], ["V"], ["bVI", "#V"], ["VI"], ["bVII", "#VI"], ["VII"]];
 const LETTERS = "CDEFGAB";
 
-export function toNumeral(chord, tonic) {
+export function toNumeral(chord, tonic, bassName = (b) => b) {
   const m = chord.match(/^([A-G])([b#]?)(.*?)(?:\/([A-G][b#]?))?$/);
   if (!m) return chord; // N.C. and anything unexpected pass through
   const [, root, acc, quality, bass] = m;
@@ -594,7 +595,7 @@ export function toNumeral(chord, tonic) {
   const diff = ((semis - MAJOR_STEPS[degree] + 18) % 12) - 6;
   const byLetter = (diff === -1 ? "b" : diff === 1 ? "#" : diff === 0 ? "" : "?") + NUMERALS[degree];
   const allowed = NUMERAL_NAMES[semis];
-  return (allowed.includes(byLetter) ? byLetter : allowed[0]) + quality + (bass ? `/${bass}` : "");
+  return (allowed.includes(byLetter) ? byLetter : allowed[0]) + quality + (bass ? `/${bassName(bass)}` : "");
 }
 
 function normalizeTitle(s) {
@@ -686,10 +687,13 @@ async function chordChart({ tune, key, instrument, numerals }) {
 
   // Numerals are the same in every key, so they're worked out from the library's own spelling
   // in its own key (a transposed spelling could flip #I to bII). The result names the tonic
-  // of the key asked for, which is what the player counts from.
+  // of the key asked for, which is what the player counts from. A slash chord's bass is a
+  // note name, not a numeral, so it moves to that key too: Cmaj7/E in C is Imaj7/E, and in F
+  // it is Imaj7/A (left as Imaj7/E, an F player would put E in the bass).
   const tonic = keyName;
+  const bassInKey = (b) => (semis === 0 ? b : names[(noteToPc(b[0], b[1] || "") + semis) % 12]);
   const tx = numerals
-    ? (c) => toNumeral(c, original.name)
+    ? (c) => toNumeral(c, original.name, bassInKey)
     : (c) => (semis === 0 ? c : transposeChord(c, semis, names));
   const sections = chart.sections.map((sec) => ({
     label: sec.label,
