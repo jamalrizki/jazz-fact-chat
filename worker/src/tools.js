@@ -666,8 +666,9 @@ async function chordChart({ tune, key, instrument, numerals }) {
   const original = parseKey(chart.key);
   let target = original;
   if (key !== undefined && key !== null && key !== "") {
-    target = parseKey(requireString(key, "key", 20));
-    if (!target) throw new Error("That is not a key I understand. Use a note name like F, Bb, or F#.");
+    const k = parseKeyArg(requireString(key, "key", 20));
+    if (!k) throw new Error("That is not a key I understand. Use a note name like F, Bb, or F#.");
+    target = { pc: k.pc, name: k.name }; // a mode word ("Bb minor") is accepted; the tune keeps its own mode
   }
   const sharpSet = chart.mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
   // `target` is the concert key. A transposing instrument reads a fixed interval above it;
@@ -731,15 +732,20 @@ async function chordChart({ tune, key, instrument, numerals }) {
  * title the model is allowed to list has a chart behind it. It never returns chords.
  */
 const FIND_DEFAULT_LIMIT = 8;
-// A whole key name and nothing else: "F", "Bb", "F#", "C minor", "Cm", "Eb major", "C-".
-const KEY_ARG_RE = /^([A-G])\s*(#|♯|b|♭|sharp|flat)?\s*(maj|major|m|min|minor|-)?$/i;
+// A whole key name and nothing else: "F", "Bb", "F#", "B-flat", "F sharp", "C minor", "Cm", "Eb major", "C-".
+// The whole string must match, so "B-flat" can't be read as B and "Germany" can't be read as G.
+// ("C-" is jazz shorthand for C minor; "-flat"/"-sharp" after a letter is the accidental.)
+const KEY_ARG_RE = /^([A-G])(?:\s*(#|♯|b|♭)|[\s-]*(sharp|flat|natural))?\s*(maj|major|m|min|minor|-)?$/i;
 
-function parseKeyArg(input) {
-  const m = input.match(KEY_ARG_RE);
+// Used for every key a caller passes (chord_chart and find_tunes). Returns { pc, name, mode } or null.
+export function parseKeyArg(input) {
+  const m = String(input).trim().match(KEY_ARG_RE);
   if (!m) return null;
-  const key = parseKey(m[1] + (m[2] || ""));
-  const q = (m[3] || "").toLowerCase();
-  return { pc: key.pc, mode: !q ? null : q.startsWith("maj") ? "major" : "minor" };
+  const word = (m[3] || "").toLowerCase();
+  const acc = m[2] ? (/^(#|♯)$/.test(m[2]) ? "#" : "b") : word === "sharp" ? "#" : word === "flat" ? "b" : "";
+  const letter = m[1].toUpperCase();
+  const q = (m[4] || "").toLowerCase();
+  return { pc: noteToPc(letter, acc), name: letter + acc, mode: !q ? null : q.startsWith("maj") ? "major" : "minor" };
 }
 
 // Form type, worked out from the chart's form text: "12-bar minor blues" → blues,
