@@ -865,7 +865,8 @@ export function splitChartResult(sc) {
   // concert_key lets the setlist re-ask for the same chart for another instrument (setlist-print.js).
   const concertKey = sc.concert_key || sc.key;
   return {
-    page: { title: sc.title, composer: sc.composer, key: pageKey, concert_key: concertKey, form: sc.form, style: sc.layout.style, bars: sc.layout.bars },
+    // chorus_bars (bars in one chorus, repeats played out) lets the setlist timer work out a tune's length (setlist-time.js).
+    page: { title: sc.title, composer: sc.composer, key: pageKey, concert_key: concertKey, form: sc.form, style: sc.layout.style, bars: sc.layout.bars, chorus_bars: sc.bars },
     model: {
       found: true, title: sc.title, composer: sc.composer, key: sc.key,
       ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),

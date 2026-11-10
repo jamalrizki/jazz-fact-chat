@@ -266,6 +266,52 @@ const setlistName = document.getElementById("setlist-name");
 const setlistInstrument = document.getElementById("setlist-instrument");
 const setlistDownload = document.getElementById("setlist-download");
 const setlistClear = document.getElementById("setlist-clear");
+const setlistTotal = document.getElementById("setlist-total");
+
+// Setlist timer: tempo and choruses per tune, saved with the setlist. The math is in
+// setlist-time.js (tested); this only wires the inputs. Invalid input shows "—" for that tune.
+function updateSetlistTotal() {
+  if (!setlistTotal) return;
+  const line = SetlistTime.totalLine(SetlistTime.setSeconds(setlist.charts));
+  setlistTotal.textContent = line;
+  setlistTotal.hidden = !line;
+}
+
+function timingRow(c) {
+  const row = h("span", "sl-time");
+  const out = h("span", "sl-est");
+  const show = () => {
+    const s = SetlistTime.tuneSeconds(c, c.bpm, c.choruses);
+    out.textContent = s === null ? "—" : `~${SetlistTime.clock(s)}`;
+  };
+  const field = (prop, min, max, unit, label) => {
+    const input = h("input");
+    input.type = "number";
+    input.inputMode = "numeric";
+    input.min = min;
+    input.max = max;
+    input.step = 1;
+    input.value = c[prop] === undefined ? "" : String(c[prop]).slice(0, 4);
+    input.setAttribute("aria-label", `${label} for ${c.title}`);
+    input.addEventListener("input", () => {
+      const v = input.value.trim().slice(0, 4);
+      if (v) c[prop] = v; else delete c[prop];
+      saveSetlist();
+      show();
+      updateSetlistTotal();
+    });
+    const wrap = h("label", "sl-field");
+    wrap.append(input, h("span", null, unit));
+    return wrap;
+  };
+  row.append(
+    field("bpm", SetlistTime.BPM_MIN, SetlistTime.BPM_MAX, "BPM", "Tempo in BPM"),
+    field("choruses", SetlistTime.CHORUSES_MIN, SetlistTime.CHORUSES_MAX, "choruses", "Solo choruses"),
+    out,
+  );
+  show();
+  return row;
+}
 
 function moveInSetlist(i, delta) {
   const j = i + delta;
@@ -297,9 +343,10 @@ function renderSetlist() {
       mk("sl-down", "↓", `Move ${c.title} down`, () => moveInSetlist(i, 1), i === setlist.charts.length - 1),
       mk("sl-remove", "×", `Remove ${c.title}`, () => { setlist.charts.splice(i, 1); saveSetlist(); renderSetlist(); }, false),
     );
-    li.append(title, tools);
+    li.append(title, tools, timingRow(c));
     setlistItems.append(li);
   });
+  updateSetlistTotal();
   const empty = setlist.charts.length === 0;
   setlistEmpty.hidden = !empty;
   setlistDownload.disabled = empty;

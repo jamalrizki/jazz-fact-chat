@@ -784,6 +784,19 @@ pre.code {
 .sl-tools button { width: 36px; height: 36px; border-radius: 6px; background: rgba(var(--white-rgb), 0.06); color: var(--ink); font-size: 1rem; }
 .sl-tools button:hover:not(:disabled) { background: rgba(var(--red-rgb), 0.25); color: #fff; }
 .sl-tools button:disabled { opacity: 0.3; cursor: default; }
+/* setlist timer: a second line under each tune (tempo, choruses, estimate) and a total */
+.sl-items li { flex-wrap: wrap; }
+.sl-time { display: flex; flex-basis: 100%; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-width: 0; padding-left: calc(1.6em + 8px); color: var(--faint); font-size: 0.8rem; }
+.sl-field { display: flex; align-items: center; gap: 4px; }
+.sl-field input {
+  width: 3.2em; padding: 4px 5px; text-align: right; appearance: textfield; -moz-appearance: textfield; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--input-bg); color: var(--ink); font: inherit; font-size: 0.9rem; font-variant-numeric: tabular-nums;
+}
+.sl-field input::-webkit-inner-spin-button, .sl-field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.sl-field input:focus { outline: none; border-color: var(--red); box-shadow: 0 0 8px rgba(var(--red-rgb), 0.4); }
+.sl-est { margin-left: auto; padding-right: 4px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sl-total { margin: 10px 0 0; color: var(--ink); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.sl-total[hidden] { display: none; }
 .sl-empty { color: var(--muted); font-size: 0.9rem; }
 .sl-empty[hidden] { display: none; }
 .sl-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }

@@ -29,6 +29,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 - **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags and "According to Wikipedia, …" phrases from replies.
 - **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two.
 - **The setlist calls the MCP server directly.** Its "Print for" switch (concert, Bb, Eb, F) sends one JSON-RPC batch of `chord_chart` `tools/call`s to `/mcp` (`setlist-print.js`), with no model in the loop, so the page never transposes anything itself.
+- **The setlist timer is plain page code, not a tool.** Each tune gets a tempo (BPM) and a number of solo choruses; `setlist-time.js` works out (head in + choruses + head out) × bars per chorus × beats per bar ÷ tempo and adds up the set. The page already has the chart, so there is nothing for the model to fetch or decide.
 
 ## Tools
 
@@ -112,6 +113,7 @@ For local debugging, `DEBUG_BOOKS=1` in `worker/.dev.vars` prints which passages
 index.html, app.js, style.css    chat page (lounge theme, chord-chart renderer, chart menu, setlist)
 charts.js                        chart row layout (shared) and PDF export (jsPDF, loaded on demand)
 setlist-print.js                 setlist "Print for" switch: re-asks chord_chart over /mcp for another instrument
+setlist-time.js                  setlist timer: each tune's length from tempo × choruses × form, and the set total
 docs.html, docs.js               "How it works" page (tool list loaded live via tools/list)
 config.js                        Worker URL (local vs deployed)
 worker/src/index.js              chat endpoint, system prompt, tool-use loop, provider fallback
@@ -129,6 +131,7 @@ worker/test/source-tags.test.js  replies never name their sources
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 worker/test/instrument-charts.test.js  charts for Bb, Eb and F instruments
 worker/test/setlist-print.test.js      setlist "Print for" switch, end to end through /mcp
+worker/test/setlist-time.test.js       setlist timer math and input checks
 rag/                             text extraction and chunking for the reference material
 ```
 

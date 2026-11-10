@@ -60,6 +60,7 @@
       form: sc.form,
       style: sc.layout.style ?? null,
       bars: sc.layout.bars,
+      ...(Number.isInteger(sc.bars) ? { chorus_bars: sc.bars } : {}),
     };
   }
 
