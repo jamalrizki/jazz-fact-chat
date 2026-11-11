@@ -214,9 +214,12 @@ function withChartMenu(chart, sheetEl) {
   menu.setAttribute("role", "menu");
   menu.hidden = true;
   const pdfItem = h("button", null, "Download PDF");
+  // Only for charts whose concert key is known (older saved horn charts don't have one).
+  const keysItem = SetlistPrint.planAllKeys(chart).length ? h("button", null, "Download in all 12 keys") : null;
   const setItem = h("button");
-  for (const b of [pdfItem, setItem]) { b.type = "button"; b.setAttribute("role", "menuitem"); }
-  menu.append(pdfItem, setItem);
+  const items = [pdfItem, keysItem, setItem].filter(Boolean);
+  for (const b of items) { b.type = "button"; b.setAttribute("role", "menuitem"); }
+  menu.append(...items);
 
   const state = {
     button,
@@ -238,6 +241,19 @@ function withChartMenu(chart, sheetEl) {
   });
   pdfItem.addEventListener("click", async () => {
     await makePdf(() => ChartSheet.downloadChart(chart), pdfItem, "Making PDF…");
+    state.close();
+  });
+  // One MCP batch of 12 chord_chart calls (setlist-print.js): the tool does every transposition.
+  keysItem?.addEventListener("click", async () => {
+    await makePdf(async () => {
+      const { charts, missing } = await SetlistPrint.allKeys(chart, { url: `${WORKER_URL}/mcp`, fetchFn: fetch });
+      if (!charts.length) throw new Error("no keys came back");
+      const forTag = SetlistPrint.writtenFor(chart);
+      const name = `${chart.title} in all 12 keys${forTag === "concert" ? "" : ` (for ${forTag})`}`;
+      const note = missing.length ? `Missing (couldn't load): ${missing.join(", ")} concert` : "";
+      await ChartSheet.downloadSetlist(name, charts, { count: `${charts.length} keys, round the cycle of fourths`, note });
+      if (missing.length) toast(`Couldn't load ${missing.length === 1 ? "one key" : `${missing.length} keys`}: ${missing.join(", ")} concert. The PDF has the rest.`);
+    }, keysItem, "Making PDF…");
     state.close();
   });
   setItem.addEventListener("click", () => {

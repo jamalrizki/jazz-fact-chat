@@ -119,7 +119,7 @@ export const TOOLS = [
       "Return the chord changes for a tune from the chord library (over 2,000 tunes, jazz and other styles), optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
       "The result includes chart_text (plain text) and layout (the chart as written). " +
-      "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead.",
+      "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead. For \"all 12 keys\", call once and point to the chart's ⋯ menu item \"Download in all 12 keys\".",
     inputSchema: {
       type: "object",
       properties: {

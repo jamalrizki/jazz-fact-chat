@@ -27,7 +27,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 - **The model never runs anything.** It returns `tool_calls`; the Worker runs them through MCP and sends the results back until the model answers (at most 4 tool rounds).
 - **Tools are defined once** (`worker/src/tools.js`, MCP-native `inputSchema`). The same definitions serve outside MCP clients at `/mcp` and the app's own chat loop. `mcp-client.js` converts them to the OpenAI function format the LLM providers expect.
 - **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags and "According to Wikipedia, …" phrases from replies.
-- **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two.
+- **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two. A chart's ⋯ menu item "Download in all 12 keys" works like the setlist below: one JSON-RPC batch of 12 `chord_chart` `tools/call`s to `/mcp`, round the cycle of fourths from the chart's key (`planAllKeys` in `setlist-print.js`), drawn as one PDF.
 - **The setlist calls the MCP server directly.** Its "Print for" switch (concert, Bb, Eb, F) sends one JSON-RPC batch of `chord_chart` `tools/call`s to `/mcp` (`setlist-print.js`), with no model in the loop, so the page never transposes anything itself.
 
 ## Tools
@@ -128,6 +128,7 @@ worker/test/voicings.test.js     chord-spelling tests
 worker/test/source-tags.test.js  replies never name their sources
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 worker/test/instrument-charts.test.js  charts for Bb, Eb and F instruments
+worker/test/all-keys.test.js           "Download in all 12 keys", end to end through /mcp
 worker/test/setlist-print.test.js      setlist "Print for" switch, end to end through /mcp
 rag/                             text extraction and chunking for the reference material
 ```

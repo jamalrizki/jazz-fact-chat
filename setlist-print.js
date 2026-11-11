@@ -87,10 +87,63 @@
     return { charts: out, kept: [...kept].sort((a, b) => a - b).map((i) => charts[i].title) };
   }
 
+  /* ---------- "Download in all 12 keys" ----------
+   * Same idea as "Print for": the page names 12 concert keys and asks chord_chart for each one
+   * (one batch), so the transposing is still done by the tool. Round the cycle of fourths from
+   * the chart's own key. Key names are a fixed list of ordinary key signatures, one per pitch
+   * class, passed to chord_chart as-is; the chart's own key keeps the name it already has.
+   */
+  const CYCLE_MAJOR = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "B", "E", "A", "D", "G"];
+  const CYCLE_MINOR = ["C", "F", "Bb", "Eb", "G#", "C#", "F#", "B", "E", "A", "D", "G"];
+  const LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const pcOf = (name) => (LETTER_PC[name[0]] + (name[1] === "#" ? 1 : name[1] === "b" ? -1 : 0) + 12) % 12;
+
+  // The 12 tools/call requests for one chart, or [] if its concert key can't be known.
+  // `id` is the position in the cycle (0 = the chart's own key). The instrument it's written for is kept.
+  function planAllKeys(chart) {
+    const concert = chart && concertKeyOf(chart);
+    if (!concert || typeof chart.title !== "string" || !chart.title) return [];
+    const m = concert.match(/^([A-G][b#]?)(?: (major|minor))?$/);
+    if (!m) return [];
+    const cycle = m[2] === "minor" ? CYCLE_MINOR : CYCLE_MAJOR;
+    const start = cycle.findIndex((k) => pcOf(k) === pcOf(m[1]));
+    const keys = cycle.map((_, i) => (i === 0 ? m[1] : cycle[(start + i) % 12]));
+    const instrument = writtenFor(chart);
+    return keys.map((key, id) => ({
+      jsonrpc: "2.0",
+      id,
+      method: "tools/call",
+      params: { name: "chord_chart", arguments: { tune: chart.title, key, instrument } },
+    }));
+  }
+
+  // Returns { charts, missing }: the charts that came back, in cycle order, and the concert
+  // key roots that didn't (each left out, never a half-made page). Throws if /mcp can't be reached.
+  async function allKeys(chart, { url, fetchFn }) {
+    const requests = planAllKeys(chart);
+    if (!requests.length) return { charts: [], missing: [] };
+    const res = await fetchFn(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify(requests),
+    });
+    if (!res.ok) throw new Error(`MCP HTTP ${res.status}`);
+    const replies = await res.json();
+    const byId = new Map((Array.isArray(replies) ? replies : [replies]).map((r) => [r && r.id, r]));
+    const charts = [];
+    const missing = [];
+    for (const req of requests) {
+      const c = chartFromReply(byId.get(req.id), chart);
+      if (c) charts.push(c);
+      else missing.push(req.params.arguments.key);
+    }
+    return { charts, missing };
+  }
+
   // Shown on the cover page and in the file name.
   function label(instrument) {
     return instrument === "concert" ? "concert" : INSTRUMENTS.includes(instrument) ? `for ${instrument}` : "";
   }
 
-  root.SetlistPrint = { INSTRUMENTS, SAVED, writtenFor, concertKeyOf, planRequests, chartFromReply, chartsFor, label };
+  root.SetlistPrint = { INSTRUMENTS, SAVED, writtenFor, concertKeyOf, planRequests, chartFromReply, chartsFor, label, planAllKeys, allKeys };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -363,7 +363,8 @@
     }
   }
 
-  function drawSetlistCover(doc, name, charts) {
+  // count: the line under the title ("12 tunes" by default). note: one extra grey line, if any.
+  function drawSetlistCover(doc, name, charts, { count, note } = {}) {
     let y = PAGE.m + 8;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(24);
@@ -372,7 +373,8 @@
     doc.setFontSize(10);
     doc.setTextColor(90, 90, 90);
     const when = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-    doc.text(`${charts.length} tune${charts.length === 1 ? "" : "s"}  ·  ${latin(when)}`, PAGE.m, y + 7);
+    doc.text(`${latin(count || `${charts.length} tune${charts.length === 1 ? "" : "s"}`)}  ·  ${latin(when)}`, PAGE.m, y + 7);
+    if (note) { doc.text(latin(note), PAGE.m, y + 13, { maxWidth: PAGE.w - 2 * PAGE.m }); y += 6; }
     doc.setTextColor(0, 0, 0);
     y += 18;
     charts.forEach((c, i) => {
@@ -407,15 +409,16 @@
     }
   }
 
-  // charts: [{ title, composer, key, form, style, bars }]. With setlistName, adds a cover page.
-  async function buildPdf(charts, { setlistName } = {}) {
+  // charts: [{ title, composer, key, form, style, bars }]. With setlistName, adds a cover page
+  // (cover: optional { count, note } for its subtitle lines).
+  async function buildPdf(charts, { setlistName, cover } = {}) {
     const JsPDF = await loadJsPDF();
     const doc = new JsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
     doc.setDrawColor(0, 0, 0);
     doc.setFillColor(0, 0, 0);
     let first = true;
     const next = () => { if (!first) doc.addPage(); first = false; };
-    if (setlistName) { next(); drawSetlistCover(doc, setlistName, charts); }
+    if (setlistName) { next(); drawSetlistCover(doc, setlistName, charts, cover); }
     for (const chart of charts) { next(); drawChart(doc, chart); }
     pageNumbers(doc, setlistName || charts[0]?.title || "");
     doc.setProperties({ title: latin(setlistName || charts[0]?.title || "Chart"), creator: "Jaizz Chat" });
@@ -427,8 +430,8 @@
     doc.save(`${fileName(`${chart.title}${chart.key ? ` (${chart.key})` : ""}`)}.pdf`);
   }
 
-  async function downloadSetlist(name, charts) {
-    const doc = await buildPdf(charts, { setlistName: name || "Setlist" });
+  async function downloadSetlist(name, charts, cover) {
+    const doc = await buildPdf(charts, { setlistName: name || "Setlist", cover });
     doc.save(`${fileName(name || "Setlist")}.pdf`);
   }
 
