@@ -59,15 +59,16 @@ export const TOOLS = [
     description:
       "Look up an album in MusicBrainz and return its release year and personnel (who played what). " +
       "ALWAYS use this for any question about who played on a record, its lineup, sidemen, or release year. " +
-      "Never state album personnel from memory. Include the artist when you know it, because many albums share titles.",
+      "Never state album personnel from memory. Include the artist when you know it, because many albums share titles. " +
+      "For records two players made together, pass with instead of album.",
     inputSchema: {
       type: "object",
       properties: {
         album: { type: "string", description: "Album title, e.g. \"Kind of Blue\"." },
         artist: { type: "string", description: "Leader or credited artist, e.g. \"Miles Davis\". Optional but strongly recommended." },
         track: { type: "string", description: "Optional track title, to get just that track's players." },
+        with: { type: "array", items: { type: "string" }, description: "Two players, e.g. [\"Paul Chambers\", \"Philly Joe Jones\"]: albums both are credited on." },
       },
-      required: ["album"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -307,7 +308,8 @@ async function lookupMusician({ name }) {
   };
 }
 
-async function albumLineup({ album, artist, track }) {
+async function albumLineup({ album, artist, track, with: pair }) {
+  if (pair !== undefined && pair !== null) return sharedAlbums(pair);
   album = requireString(album, "album", 150);
   if (artist !== undefined && artist !== null && artist !== "") artist = requireString(artist, "artist", 100);
   else artist = null;
@@ -366,6 +368,120 @@ async function albumLineup({ album, artist, track }) {
     };
   }
   return track ? trackLineup(best, track) : albumWide(best);
+}
+
+/* ---------- albums two players are both credited on (album_lineup with) ----------
+ * Tool-use idea: the model only names the two players. The Worker resolves each name to a
+ * MusicBrainz artist, reads that artist's album-level credits, and intersects the two lists
+ * here in code. Sorting, deduping pressings and the cap are code too, never the model.
+ */
+const MAX_SHARED = 10;
+const PLAYER_REL_TYPES = new Set(["instrument", "vocal", "performer", "conductor"]); // not engineers or producers
+
+async function sharedAlbums(pair) {
+  if (!Array.isArray(pair) || pair.length !== 2) throw new Error('"with" must list exactly two players');
+  const names = pair.map((n) => requireString(n, "with", 100));
+  if (normalizeTitle(names[0]) === normalizeTitle(names[1])) throw new Error('"with" must name two different players');
+
+  const players = [];
+  for (const [i, name] of names.entries()) {
+    if (i > 0) await sleep(1100); // MusicBrainz allows about 1 request per second
+    const artist = await resolveArtist(name);
+    if (!artist) {
+      // No echo of the caller's text: say which slot failed, not what was typed.
+      return {
+        found: false,
+        message: `MusicBrainz has no musician matching the ${i === 0 ? "first" : "second"} name. Tell the user you can't confirm records they made together; don't list albums from memory.`,
+      };
+    }
+    players.push(artist);
+  }
+
+  const credits = [];
+  for (const artist of players) {
+    await sleep(1100);
+    const full = await getJson(`https://musicbrainz.org/ws/2/artist/${encodeURIComponent(artist.id)}?fmt=json&inc=release-rels`);
+    credits.push(albumCredits(full?.relations || []));
+  }
+
+  const shared = intersectAlbums(credits[0], credits[1], players.map((p) => p.name));
+  const who = players.map(({ name, disambiguation }) => (disambiguation ? { name, disambiguation } : { name }));
+  if (shared.length === 0) {
+    return {
+      found: false,
+      players: who,
+      message: "MusicBrainz has no album crediting both players album-wide. Say you can't confirm records they made together; don't list albums from memory. You may try search_jazz.",
+    };
+  }
+  const albums = shared.slice(0, MAX_SHARED);
+  const more = shared.length - albums.length;
+  return {
+    found: true,
+    source: "MusicBrainz",
+    players: who,
+    albums,
+    more: more || undefined,
+    note:
+      "Albums where MusicBrainz credits both players, oldest first. Some sessions are credited only track by track and are missing, " +
+      "so say \"at least these\", not that this is every record they made together." +
+      (more ? ` There are ${more} more: give the count, don't name them from memory.` : ""),
+  };
+}
+
+/** Name -> { id, name, disambiguation } or null. Exact-name hits first; among those, a jazz player first. */
+async function resolveArtist(name) {
+  const clean = name.replace(/["\\]/g, " ").trim();
+  const search = await getJson(
+    "https://musicbrainz.org/ws/2/artist?fmt=json&limit=5&query=" +
+      encodeURIComponent(`artist:"${clean}" OR alias:"${clean}"`)
+  );
+  return pickArtist(search?.artists || [], name);
+}
+
+/** Exported for tests. */
+export function pickArtist(artists, name) {
+  const hits = artists.filter((a) => a?.id && a?.name && (a.score ?? 0) >= 90);
+  const want = normalizeTitle(name);
+  const exact = hits.filter((a) => normalizeTitle(a.name) === want);
+  const pool = exact.length ? exact : hits;
+  const pick = pool.find((a) => /jazz/i.test(a.disambiguation || "")) || pool[0];
+  return pick ? { id: pick.id, name: pick.name, disambiguation: pick.disambiguation || null } : null;
+}
+
+// One album, however many pressings: "Cookin' (Remastered)" and "Cookin'" are the same record.
+const albumKey = (title) => normalizeTitle(String(title).replace(/[([][^)\]]*[)\]]/g, " "));
+
+/** An artist's album-level player credits, keyed by album: Map(key -> { title, year, roles }). Exported for tests. */
+export function albumCredits(relations) {
+  const out = new Map();
+  for (const rel of relations) {
+    if (rel?.["target-type"] !== "release" || !rel.release?.title || !PLAYER_REL_TYPES.has(rel.type)) continue;
+    const r = rel.release;
+    const key = albumKey(r.title);
+    if (!key) continue;
+    const year = /^\d{4}/.test(r.date || "") ? Number(r.date.slice(0, 4)) : null;
+    const roles = rel.type === "instrument" ? (rel.attributes?.length ? rel.attributes : ["instrument"]) : [rel.type === "vocal" ? "vocals" : rel.type];
+    const a = out.get(key) || { title: r.title, year, roles: [], reissue: isReissue(r) };
+    // Earliest pressing sets the year; a plain (non-reissue) title wins for display.
+    if (year && (!a.year || year < a.year)) a.year = year;
+    if (a.reissue && !isReissue(r)) Object.assign(a, { title: r.title, reissue: false });
+    roles.forEach((x) => a.roles.includes(x) || a.roles.push(x));
+    out.set(key, a);
+  }
+  return out;
+}
+
+/** Albums in both credit maps, oldest first (undated last). Exported for tests. */
+export function intersectAlbums(a, b, [nameA, nameB]) {
+  const both = [];
+  for (const [key, x] of a) {
+    const y = b.get(key);
+    if (!y) continue;
+    const title = x.reissue && !y.reissue ? y.title : x.title;
+    const years = [x.year, y.year].filter(Boolean);
+    both.push({ title, year: years.length ? Math.min(...years) : null, roles: { [nameA]: x.roles, [nameB]: y.roles } });
+  }
+  return both.sort((p, q) => (p.year ?? 9999) - (q.year ?? 9999) || p.title.localeCompare(q.title));
 }
 
 // parseRelease keeps every player with the tracks they're on; these two shape that for the model.
