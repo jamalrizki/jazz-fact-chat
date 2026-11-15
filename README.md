@@ -35,7 +35,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 | Tool | Source | Used for |
 |---|---|---|
 | `lookup_musician` | Wikipedia | Quick bios |
-| `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players). Players on only some tracks are marked with those tracks; optional `track` gives one track's players |
+| `album_lineup` | MusicBrainz | Personnel and release year of one album (original pressing, not deluxe/expanded reissues with bonus players). Players on only some tracks are marked with those tracks; optional `track` gives one track's players; `with: [two players]` lists albums both are credited on (intersected in code, oldest first, up to 10) |
 | `search_jazz` | Wikipedia + Tavily (All About Jazz, Discogs, jazzdisco.org) | General fallback for anything specific, obscure, or uncertain (max 2 per question) |
 | `chord_chart` | Chord library (jazz standards plus Brazilian, Latin, blues, country and pop) | Changes for a tune in any key, or written for Bb, Eb or F instruments (`instrument`; `key` stays the concert key), or in Roman numerals against the key (`numerals: true`, computed in code; same in every key, with a slash chord's bass note spelled in the key asked for) |
 | `find_tunes` | Chord library metadata | Lists library tunes by composer, key, mode, style and/or form ("Miles Davis tunes", "bossas", "minor blues"), up to 10 titles with key, form and style. Style only matches styles the library actually has (otherwise it returns that list); form is blues, AABA or other, worked out from the chart's form. Filtering is done in code, so every title has a chart; never returns chords |
@@ -128,6 +128,7 @@ worker/test/voicings.test.js     chord-spelling tests
 worker/test/source-tags.test.js  replies never name their sources
 worker/test/album-lineup.test.js original-pressing choice (MusicBrainz stubbed, offline)
 worker/test/track-personnel.test.js    who plays on which track (MusicBrainz stubbed, offline)
+worker/test/shared-albums.test.js      albums two players are both on (MusicBrainz stubbed, offline)
 worker/test/instrument-charts.test.js  charts for Bb, Eb and F instruments
 worker/test/setlist-print.test.js      setlist "Print for" switch, end to end through /mcp
 rag/                             text extraction and chunking for the reference material
