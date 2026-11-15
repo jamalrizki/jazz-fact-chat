@@ -65,6 +65,7 @@ export const TOOLS = [
       properties: {
         album: { type: "string", description: "Album title, e.g. \"Kind of Blue\"." },
         artist: { type: "string", description: "Leader or credited artist, e.g. \"Miles Davis\". Optional but strongly recommended." },
+        track: { type: "string", description: "Optional track title, to get just that track's players." },
       },
       required: ["album"],
       additionalProperties: false,
@@ -306,10 +307,12 @@ async function lookupMusician({ name }) {
   };
 }
 
-async function albumLineup({ album, artist }) {
+async function albumLineup({ album, artist, track }) {
   album = requireString(album, "album", 150);
   if (artist !== undefined && artist !== null && artist !== "") artist = requireString(artist, "artist", 100);
   else artist = null;
+  if (track !== undefined && track !== null && track !== "") track = requireString(track, "track", 100);
+  else track = null;
 
   // Step 1: search releases. MusicBrainz uses Lucene query syntax, so strip characters
   // that would break out of our quoted phrases.
@@ -353,14 +356,77 @@ async function albumLineup({ album, artist }) {
   }
   if (!best) return { found: false, message: "MusicBrainz search matched, but the release details could not be loaded." };
 
+  if (best.personnel.length === 0) {
+    return {
+      found: true,
+      source: "MusicBrainz",
+      ...withoutPlayers(best),
+      personnel: [],
+      note: "MusicBrainz lists this album but has no personnel credits for it. Tell the user that; do not fill in names from memory.",
+    };
+  }
+  return track ? trackLineup(best, track) : albumWide(best);
+}
+
+// parseRelease keeps every player with the tracks they're on; these two shape that for the model.
+const withoutPlayers = ({ players, tracks, perTrack, ...rest }) => rest;
+const MAX_PERSONNEL = 25;
+const MAX_TRACK_TITLES = 10;
+
+// Whole album: a player who is on every credited track (or credited album-wide) gets no
+// extra field; a player on only some tracks gets on_tracks. That split is decided here, in code.
+function albumWide(best) {
+  const all = new Set(best.tracks.filter((t) => t.credited).map((t) => t.title)).size; // same title twice (alt takes) counts once
+  const personnel = best.players.slice(0, MAX_PERSONNEL).map((p) => {
+    const out = { name: p.name, roles: p.roles };
+    if (!best.perTrack || p.wholeAlbum || p.tracks.length >= all) return out;
+    const titles = p.tracks.slice(0, MAX_TRACK_TITLES);
+    if (p.tracks.length > MAX_TRACK_TITLES) titles.push(`+${p.tracks.length - MAX_TRACK_TITLES} more`);
+    return { ...out, on_tracks: titles };
+  });
+  const notes = [];
+  if (personnel.some((p) => p.on_tracks)) notes.push("Players with on_tracks play only on those tracks; everyone else is on the whole album.");
+  if (!best.perTrack) notes.push("MusicBrainz credits this album as a whole, not track by track, so you can't say who plays on which track.");
+  else if (best.tracks.some((t) => !t.credited)) notes.push("Some tracks have no player credits in MusicBrainz.");
+  return { found: true, source: "MusicBrainz", ...withoutPlayers(best), personnel, note: notes.join(" ") || undefined };
+}
+
+// One track: match its title in code (same normalizing as chart titles), then keep only its players.
+function trackLineup(best, track) {
+  const q = normalizeTitle(track);
+  const titles = [...new Set(best.tracks.map((t) => t.title))];
+  let hit = titles.filter((t) => normalizeTitle(t) === q);
+  // "So What" should still find "So What (alternate take)" when that's the only match.
+  if (hit.length === 0 && q) hit = titles.filter((t) => normalizeTitle(t).startsWith(q + " "));
+  if (hit.length !== 1) {
+    return {
+      found: false,
+      album: best.title,
+      tracks: titles.slice(0, 30),
+      message: hit.length
+        ? "That title matches more than one track on this album. Ask which one, using the titles listed."
+        : "No track with that title on this album in MusicBrainz. Tell the user; don't guess who played on it.",
+    };
+  }
+  const title = hit[0];
+  if (!best.perTrack) {
+    return {
+      ...albumWide(best),
+      track: title,
+      note: "MusicBrainz credits this album as a whole, not track by track. Say who is on the album and that you can't confirm who plays on this particular track.",
+    };
+  }
+  const personnel = best.players
+    .filter((p) => p.wholeAlbum || p.tracks.includes(title))
+    .slice(0, MAX_PERSONNEL)
+    .map((p) => ({ name: p.name, roles: p.trackRoles.get(title) || p.roles }));
   return {
     found: true,
     source: "MusicBrainz",
-    ...best,
-    note:
-      best.personnel.length === 0
-        ? "MusicBrainz lists this album but has no personnel credits for it. Tell the user that; do not fill in names from memory."
-        : undefined,
+    ...withoutPlayers(best),
+    track: title,
+    personnel,
+    note: personnel.length ? undefined : "MusicBrainz has no player credits for this track. Tell the user that; do not fill in names from memory.",
   };
 }
 
@@ -503,28 +569,38 @@ async function searchJazz({ query }, env = {}) {
 function parseRelease(r) {
   const leader = (r["artist-credit"] || []).map((c) => c.name + (c.joinphrase || "")).join("").trim();
 
-  // Credits live in two places: on the release itself and on each track's recording.
-  const relations = [...(r.relations || [])];
+  // Credits live in two places: on the release itself (whole album) and on each track's
+  // recording. Track credits are tagged with the track's title so we can tell who is on what.
+  const relations = (r.relations || []).map((rel) => ({ rel, track: null }));
+  const tracks = []; // { title, credited }
   for (const medium of r.media || []) {
-    for (const track of medium.tracks || []) relations.push(...(track.recording?.relations || []));
+    for (const track of medium.tracks || []) {
+      const title = track.title || track.recording?.title;
+      if (!title) continue;
+      const rels = track.recording?.relations || [];
+      tracks.push({ title, credited: rels.some((rel) => rolesOf(rel)) });
+      relations.push(...rels.map((rel) => ({ rel, track: title })));
+    }
   }
 
-  const byPerson = new Map(); // name -> Set of roles
-  for (const rel of relations) {
-    if (rel["target-type"] !== "artist" || !rel.artist?.name) continue;
-    let roles;
-    if (rel.type === "instrument") roles = rel.attributes?.length ? rel.attributes : ["instrument"];
-    else if (rel.type === "vocal") roles = ["vocals"];
-    else if (["performer", "conductor", "producer"].includes(rel.type)) roles = [rel.type];
-    else continue; // skip engineers, mastering, artwork, etc.
-    const set = byPerson.get(rel.artist.name) || new Set();
-    roles.forEach((x) => set.add(x));
-    byPerson.set(rel.artist.name, set);
+  const byPerson = new Map(); // name -> { roles, tracks, wholeAlbum, trackRoles }
+  for (const { rel, track } of relations) {
+    const roles = rolesOf(rel);
+    if (!roles) continue;
+    const p = byPerson.get(rel.artist.name) || { roles: new Set(), tracks: [], wholeAlbum: false, trackRoles: new Map() };
+    roles.forEach((x) => p.roles.add(x));
+    if (track === null) p.wholeAlbum = true;
+    else {
+      if (!p.tracks.includes(track)) p.tracks.push(track);
+      const tr = p.trackRoles.get(track) || [];
+      roles.forEach((x) => tr.includes(x) || tr.push(x));
+      p.trackRoles.set(track, tr);
+    }
+    byPerson.set(rel.artist.name, p);
   }
 
-  const personnel = [...byPerson.entries()]
-    .slice(0, 25)
-    .map(([name, roles]) => ({ name, roles: [...roles] }));
+  const players = [...byPerson.entries()].map(([name, p]) => ({ name, ...p, roles: [...p.roles] }));
+  const personnel = players.slice(0, MAX_PERSONNEL).map(({ name, roles }) => ({ name, roles }));
 
   const firstDate = r["release-group"]?.["first-release-date"] || r.date || "";
   return {
@@ -533,7 +609,19 @@ function parseRelease(r) {
     release_year: firstDate ? Number(firstDate.slice(0, 4)) : null,
     personnel,
     url: `https://musicbrainz.org/release/${r.id}`,
+    players,
+    tracks,
+    perTrack: players.some((p) => p.tracks.length > 0),
   };
+}
+
+// Which roles a MusicBrainz relation credits, or null for non-players (engineers, artwork, etc.).
+function rolesOf(rel) {
+  if (rel["target-type"] !== "artist" || !rel.artist?.name) return null;
+  if (rel.type === "instrument") return rel.attributes?.length ? rel.attributes : ["instrument"];
+  if (rel.type === "vocal") return ["vocals"];
+  if (["performer", "conductor", "producer"].includes(rel.type)) return [rel.type];
+  return null;
 }
 
 async function randomJazzFact({ topic = "any" }) {
