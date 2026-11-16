@@ -57,7 +57,7 @@ export const TOOLS = [
     name: "album_lineup",
     title: "Album personnel and release year",
     description:
-      "Look up an album in MusicBrainz and return its release year and personnel (who played what). " +
+      "Look up an album in MusicBrainz and return its release year, personnel (who played what) and who wrote each track. " +
       "ALWAYS use this for any question about who played on a record, its lineup, sidemen, or release year. " +
       "Never state album personnel from memory. Include the artist when you know it, because many albums share titles.",
     inputSchema: {
@@ -346,7 +346,7 @@ async function albumLineup({ album, artist, track }) {
     if (i > 0) await sleep(1100); // MusicBrainz allows about 1 request per second
     const full = await getJson(
       `https://musicbrainz.org/ws/2/release/${release.id}?fmt=json` +
-        "&inc=artist-credits+release-groups+artist-rels+recordings+recording-level-rels"
+        "&inc=artist-credits+release-groups+artist-rels+recordings+recording-level-rels+work-rels+work-level-rels"
     );
     if (!full) continue;
     const parsed = parseRelease(full);
@@ -362,6 +362,7 @@ async function albumLineup({ album, artist, track }) {
       source: "MusicBrainz",
       ...withoutPlayers(best),
       personnel: [],
+      ...writtenBy(best),
       note: "MusicBrainz lists this album but has no personnel credits for it. Tell the user that; do not fill in names from memory.",
     };
   }
@@ -388,7 +389,63 @@ function albumWide(best) {
   if (personnel.some((p) => p.on_tracks)) notes.push("Players with on_tracks play only on those tracks; everyone else is on the whole album.");
   if (!best.perTrack) notes.push("MusicBrainz credits this album as a whole, not track by track, so you can't say who plays on which track.");
   else if (best.tracks.some((t) => !t.credited)) notes.push("Some tracks have no player credits in MusicBrainz.");
-  return { found: true, source: "MusicBrainz", ...withoutPlayers(best), personnel, note: notes.join(" ") || undefined };
+  const written = writtenBy(best);
+  if (written.note) notes.push(written.note);
+  return { found: true, source: "MusicBrainz", ...withoutPlayers(best), personnel, written_by: written.written_by, note: notes.join(" ") || undefined };
+}
+
+/* ---------- who wrote each track ----------
+ * Tool-use idea: composer credits sit on the MusicBrainz "work" (the song) that each track's
+ * recording performs, and they arrive in the same release request (work-rels + work-level-rels),
+ * so this costs no extra call. Code reads them, merges alternate takes, and caps the list; the
+ * model only copies names. A track with no work credit is left out, never guessed.
+ */
+const MAX_WRITTEN_TRACKS = 15;
+const COMPOSER_TYPES = new Set(["composer", "writer"]);
+const LYRICIST_TYPES = new Set(["lyricist", "librettist"]);
+
+/** A track's writers from its recording's work relations: { composers, lyricists }. Exported for tests. */
+export function trackWriters(recordingRelations) {
+  const composers = [];
+  const lyricists = [];
+  for (const rel of recordingRelations || []) {
+    if (rel?.["target-type"] !== "work" || !rel.work) continue;
+    for (const w of rel.work.relations || []) {
+      if (w?.["target-type"] !== "artist" || !w.artist?.name) continue;
+      const list = COMPOSER_TYPES.has(w.type) ? composers : LYRICIST_TYPES.has(w.type) ? lyricists : null;
+      if (list && !list.includes(w.artist.name)) list.push(w.artist.name);
+    }
+  }
+  return { composers, lyricists };
+}
+
+// One entry per title (alternate takes merge), in track order.
+function writersByTitle(best) {
+  const out = new Map();
+  for (const t of best.tracks) {
+    const w = out.get(t.title) || { composers: [], lyricists: [] };
+    t.composers.forEach((n) => w.composers.includes(n) || w.composers.push(n));
+    t.lyricists.forEach((n) => w.lyricists.includes(n) || w.lyricists.push(n));
+    out.set(t.title, w);
+  }
+  return out;
+}
+
+const writerFields = ({ composers, lyricists }) => ({ by: composers, ...(lyricists.length ? { lyrics: lyricists } : {}) });
+
+/** Whole album: written_by [{ track, by, lyrics? }] for credited tracks, plus a note when some or all are missing. */
+function writtenBy(best) {
+  const all = [...writersByTitle(best)];
+  const credited = all.filter(([, w]) => w.composers.length);
+  if (credited.length === 0) {
+    return all.length ? { note: "MusicBrainz has no composer credits for these tracks; don't name composers from memory." } : {};
+  }
+  const written_by = credited.slice(0, MAX_WRITTEN_TRACKS).map(([track, w]) => ({ track, ...writerFields(w) }));
+  if (credited.length > MAX_WRITTEN_TRACKS) written_by.push({ more: credited.length - MAX_WRITTEN_TRACKS });
+  const note = credited.length < all.length
+    ? "Tracks missing from written_by have no composer credit in MusicBrainz; don't name their composers from memory."
+    : undefined;
+  return { written_by, note };
 }
 
 // One track: match its title in code (same normalizing as chart titles), then keep only its players.
@@ -409,11 +466,16 @@ function trackLineup(best, track) {
     };
   }
   const title = hit[0];
+  const w = writersByTitle(best).get(title);
+  const written = w.composers.length ? { written_by: writerFields(w) } : {};
+  const noWriter = w.composers.length ? "" : " MusicBrainz has no composer credit for this track; don't name one from memory.";
   if (!best.perTrack) {
+    const { written_by, ...album } = albumWide(best);
     return {
-      ...albumWide(best),
+      ...album,
       track: title,
-      note: "MusicBrainz credits this album as a whole, not track by track. Say who is on the album and that you can't confirm who plays on this particular track.",
+      ...written,
+      note: "MusicBrainz credits this album as a whole, not track by track. Say who is on the album and that you can't confirm who plays on this particular track." + noWriter,
     };
   }
   const personnel = best.players
@@ -426,7 +488,8 @@ function trackLineup(best, track) {
     ...withoutPlayers(best),
     track: title,
     personnel,
-    note: personnel.length ? undefined : "MusicBrainz has no player credits for this track. Tell the user that; do not fill in names from memory.",
+    ...written,
+    note: ((personnel.length ? "" : "MusicBrainz has no player credits for this track. Tell the user that; do not fill in names from memory.") + noWriter).trim() || undefined,
   };
 }
 
@@ -572,13 +635,13 @@ function parseRelease(r) {
   // Credits live in two places: on the release itself (whole album) and on each track's
   // recording. Track credits are tagged with the track's title so we can tell who is on what.
   const relations = (r.relations || []).map((rel) => ({ rel, track: null }));
-  const tracks = []; // { title, credited }
+  const tracks = []; // { title, credited, composers, lyricists }
   for (const medium of r.media || []) {
     for (const track of medium.tracks || []) {
       const title = track.title || track.recording?.title;
       if (!title) continue;
       const rels = track.recording?.relations || [];
-      tracks.push({ title, credited: rels.some((rel) => rolesOf(rel)) });
+      tracks.push({ title, credited: rels.some((rel) => rolesOf(rel)), ...trackWriters(rels) });
       relations.push(...rels.map((rel) => ({ rel, track: title })));
     }
   }
