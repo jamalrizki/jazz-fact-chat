@@ -26,7 +26,7 @@ Cloudflare Worker ── holds API keys as secrets, owns the system prompt
 
 - **The model never runs anything.** It returns `tool_calls`; the Worker runs them through MCP and sends the results back until the model answers (at most 4 tool rounds).
 - **Tools are defined once** (`worker/src/tools.js`, MCP-native `inputSchema`). The same definitions serve outside MCP clients at `/mcp` and the app's own chat loop. `mcp-client.js` converts them to the OpenAI function format the LLM providers expect.
-- **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, parsing rate-limit waits, and stripping source tags and "According to Wikipedia, …" phrases from replies.
+- **Exact work happens in code, not in the model:** transposing charts, spelling chord notes, capping searches (2 web searches and 2 reference searches per question), choosing reference passages, reading album credits track by track (who played and, as `album_lineup`'s `written_by`, who wrote each track, from MusicBrainz work credits in the same request), parsing rate-limit waits, and stripping source tags and "According to Wikipedia, …" phrases from replies.
 - **Chord charts skip the model.** `chord_chart` returns the chart as data, transposed in code. The page renders it as a chart, and the model only adds a sentence or two.
 - **The setlist calls the MCP server directly.** Its "Print for" switch (concert, Bb, Eb, F) sends one JSON-RPC batch of `chord_chart` `tools/call`s to `/mcp` (`setlist-print.js`), with no model in the loop, so the page never transposes anything itself.
 

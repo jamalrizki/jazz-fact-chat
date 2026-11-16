@@ -1,9 +1,9 @@
-// Tests for album_lineup's per-track personnel (who plays on which track).
+// Tests for album_lineup per track: who plays on which track, and who wrote it.
 // MusicBrainz is replaced by a stub `fetch`, so these run offline.
 // Run from worker/:  npm test
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runTool } from "../src/tools.js";
+import { runTool, trackWriters, TOOLS } from "../src/tools.js";
 
 const credit = (name, instrument) => ({ "target-type": "artist", type: "instrument", attributes: [instrument], artist: { name } });
 const engineer = (name) => ({ "target-type": "artist", type: "engineer", artist: { name } });
@@ -143,4 +143,107 @@ test("track argument is validated as untrusted input", async () => {
   assert.equal(long.isError, true);
   const wrongType = await lineup({ track: 42 });
   assert.equal(wrongType.isError, true);
+});
+
+/* ---------- who wrote each track (work credits) ---------- */
+
+// A recording's link to the song it performs, as MusicBrainz returns it with work-rels + work-level-rels.
+const work = (title, writers) => ({
+  "target-type": "work", type: "performance", work: { title, relations: writers },
+});
+const wrote = (name, type = "composer") => ({ "target-type": "artist", type, artist: { name } });
+
+const withWork = (t, writers) => ({ ...t, recording: { ...t.recording, relations: [...t.recording.relations, work(t.title, writers)] } });
+// Kind of Blue with composer credits on three tracks; Freddie and Flamenco left uncredited.
+const KOB_WRITTEN = KOB_TRACKS.map((t) =>
+  t.title === "So What" || t.title === "All Blues" ? withWork(t, [wrote("Miles Davis")])
+    : t.title === "Blue in Green" ? withWork(t, [wrote("Miles Davis"), wrote("Bill Evans")])
+    : t
+);
+
+test("written_by: track lookup returns the song's composers, copied from the work credit", async () => {
+  stubFetch(release({ tracks: KOB_WRITTEN }));
+  const { result } = await lineup({ track: "Blue in Green" });
+  assert.deepEqual(result.written_by, { by: ["Miles Davis", "Bill Evans"] });
+  assert.equal(result.note, undefined);
+  // Players are still there, and composer credits never turn into player credits.
+  assert.ok(result.personnel.some((p) => p.name === "Bill Evans" && p.roles.includes("piano")));
+});
+
+test("written_by: a track with no composer credit says so instead of guessing", async () => {
+  stubFetch(release({ tracks: KOB_WRITTEN }));
+  const { result } = await lineup({ track: "Freddie Freeloader" });
+  assert.equal(result.written_by, undefined);
+  assert.match(result.note, /no composer credit for this track; don't name one from memory/);
+});
+
+test("written_by: whole album lists credited tracks in order and flags the missing ones", async () => {
+  stubFetch(release({ tracks: KOB_WRITTEN }));
+  const { result } = await lineup({});
+  assert.deepEqual(result.written_by, [
+    { track: "So What", by: ["Miles Davis"] },
+    { track: "Blue in Green", by: ["Miles Davis", "Bill Evans"] },
+    { track: "All Blues", by: ["Miles Davis"] },
+  ]);
+  assert.match(result.note, /Tracks missing from written_by have no composer credit/);
+  assert.match(result.note, /only on those tracks/); // the player note is kept alongside
+});
+
+test("written_by: no work credits at all gives one note and no empty list", async () => {
+  stubFetch(release());
+  const { result } = await lineup({});
+  assert.equal(result.written_by, undefined);
+  assert.match(result.note, /no composer credits for these tracks/);
+});
+
+test("written_by: lyricists are kept apart, alternate takes merge, other work links are ignored", () => {
+  const rels = [
+    MILES, // a player credit is not a writer
+    work("Round Midnight", [wrote("Thelonious Monk"), wrote("Cootie Williams"), wrote("Bernie Hanighen", "lyricist"), wrote("Someone", "arranger")]),
+    work("Round Midnight", [wrote("Thelonious Monk")]), // a medley/duplicate link adds no repeats
+    { "target-type": "work", type: "performance" }, // malformed: no work object
+  ];
+  assert.deepEqual(trackWriters(rels), { composers: ["Thelonious Monk", "Cootie Williams"], lyricists: ["Bernie Hanighen"] });
+  assert.deepEqual(trackWriters(undefined), { composers: [], lyricists: [] });
+});
+
+test("written_by: lyricist shows as lyrics; an alternate take with the same title merges into one entry", async () => {
+  const song = tr("Round Midnight", [MILES]);
+  const tracks = [
+    withWork(song, [wrote("Thelonious Monk"), wrote("Bernie Hanighen", "lyricist")]),
+    withWork(song, [wrote("Cootie Williams")]),
+  ];
+  stubFetch(release({ tracks }));
+  const { result } = await lineup({});
+  assert.deepEqual(result.written_by, [{ track: "Round Midnight", by: ["Thelonious Monk", "Cootie Williams"], lyrics: ["Bernie Hanighen"] }]);
+  const one = await lineup({ track: "round midnight" });
+  assert.deepEqual(one.result.written_by, { by: ["Thelonious Monk", "Cootie Williams"], lyrics: ["Bernie Hanighen"] });
+});
+
+test("written_by: capped at 15 tracks plus a count", async () => {
+  const tracks = Array.from({ length: 18 }, (_, i) => withWork(tr(`Take ${i + 1}`, [MILES]), [wrote("Miles Davis")]));
+  stubFetch(release({ tracks }));
+  const { result } = await lineup({});
+  assert.equal(result.written_by.length, 16);
+  assert.deepEqual(result.written_by[15], { more: 3 });
+});
+
+test("written_by: album-wide-only player credits still give the track's composer", async () => {
+  const plain = KOB_WRITTEN.map((t) => tr(t.title, t.recording.relations.filter((r) => r["target-type"] === "work")));
+  stubFetch(release({ tracks: plain, relations: [MILES, EVANS] }));
+  const { result } = await lineup({ track: "So What" });
+  assert.deepEqual(result.written_by, { by: ["Miles Davis"] });
+  assert.match(result.note, /can't confirm who plays on this particular track/);
+});
+
+test("written_by: the release request asks for work credits in the same call (no extra request)", async () => {
+  const urls = [];
+  stubFetch(release({ tracks: KOB_WRITTEN }));
+  const stub = globalThis.fetch;
+  globalThis.fetch = async (url) => { urls.push(String(url)); return stub(url); };
+  await lineup({});
+  assert.equal(urls.length, 2); // one search, one release lookup
+  assert.match(urls[1], /work-rels\+work-level-rels/);
+  const def = TOOLS.find((t) => t.name === "album_lineup");
+  assert.match(def.description, /who wrote each track/);
 });
