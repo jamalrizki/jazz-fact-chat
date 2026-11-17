@@ -686,6 +686,20 @@ export function toNumeral(chord, tonic, bassName = (b) => b) {
   return (allowed.includes(byLetter) ? byLetter : allowed[0]) + quality + (bass ? `/${bassName(bass)}` : "");
 }
 
+/**
+ * A key asked for with the other mode ("Autumn Leaves in Bb major", when the tune is minor)
+ * names the tune's relative key: the one with the same key signature. Bb major → G minor,
+ * A minor → C major. Returns { pc, name } for that key, or null when the modes already agree
+ * (or no mode word was given). The relative is spelled from the same key signature as the key
+ * asked for, so Db major gives Bb minor (not A# minor) and C# major gives A# minor. Exported for tests.
+ */
+export function relativeKey(asked, tuneMode) {
+  if (!asked?.mode || (tuneMode !== "major" && tuneMode !== "minor") || asked.mode === tuneMode) return null;
+  const pc = (asked.pc + (tuneMode === "minor" ? 9 : 3)) % 12; // relative minor is a minor 3rd below
+  const sharp = (asked.mode === "major" ? SHARP_MAJOR_KEYS : SHARP_MINOR_KEYS).has(asked.name);
+  return { pc, name: (sharp ? SHARP_NAMES : FLAT_NAMES)[pc] };
+}
+
 function normalizeTitle(s) {
   return String(s)
     .toLowerCase()
@@ -754,10 +768,18 @@ async function chordChart({ tune, key, instrument, numerals }) {
 
   const original = parseKey(chart.key);
   let target = original;
+  let keyNote = null;
   if (key !== undefined && key !== null && key !== "") {
     const k = parseKeyArg(requireString(key, "key", 20));
     if (!k) throw new Error("That is not a key I understand. Use a note name like F, Bb, or F#.");
     target = { pc: k.pc, name: k.name }; // a mode word ("Bb minor") is accepted; the tune keeps its own mode
+    const rel = relativeKey(k, chart.mode);
+    if (rel) {
+      target = rel;
+      // Built from the parsed key and the library's mode only, never the caller's text.
+      keyNote = `This tune is ${chart.mode}. ${k.name} ${k.mode} was read as its relative ${chart.mode} key, ` +
+        `${rel.name} ${chart.mode} (same key signature). For ${k.name} as the tonic, ask for ${k.name} ${chart.mode}.`;
+    }
   }
   const sharpSet = chart.mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
   // `target` is the concert key. A transposing instrument reads a fixed interval above it;
@@ -810,6 +832,7 @@ async function chordChart({ tune, key, instrument, numerals }) {
     transposed: semis !== 0,
     ...(offset ? { instrument, concert_key: `${concertName} ${chart.mode}` } : {}),
     ...(numerals ? { numerals: true, numerals_from: tonic } : {}),
+    ...(keyNote ? { key_note: keyNote } : {}),
     form: chart.form,
     bars: totalBars,
     chart_text: lines.join("\n"),
@@ -958,8 +981,10 @@ export function splitChartResult(sc) {
       found: true, title: sc.title, composer: sc.composer, key: sc.key,
       ...(sc.instrument ? { instrument: sc.instrument, concert_key: sc.concert_key } : {}),
       ...(sc.numerals ? { numerals: true, numerals_from: sc.numerals_from } : {}),
+      ...(sc.key_note ? { key_note: sc.key_note } : {}),
       form: sc.form, bars: sc.bars,
       note: "The full chart is displayed to the user automatically. Do not write out the chords." +
+        (sc.key_note ? " Tell the user what key_note says, in one short sentence." : "") +
         (sc.numerals ? " It is shown in Roman numerals counted from numerals_from; don't write out or analyze the numerals yourself." : "") +
         (sc.instrument ? " key is the written key for that instrument; say it and the concert key exactly as given." : ""),
     },
