@@ -28,7 +28,7 @@ export const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03
 
 const SERVER_INFO = { name: "jazz-fact-chat", title: "Jaizz Chat", version: "0.3.0" };
 const INSTRUCTIONS =
-  "Jazz reference tools. Use album_lineup for album personnel and release years, " +
+  "Jazz reference tools. Use album_lineup for album personnel and release years (or recordings of a tune), " +
   "lookup_musician for biographies, and random_jazz_fact for trivia.";
 const MAX_BODY_BYTES = 64 * 1024;
 

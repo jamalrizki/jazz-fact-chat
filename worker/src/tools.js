@@ -59,15 +59,16 @@ export const TOOLS = [
     description:
       "Look up an album in MusicBrainz and return its release year and personnel (who played what). " +
       "ALWAYS use this for any question about who played on a record, its lineup, sidemen, or release year. " +
-      "Never state album personnel from memory. Include the artist when you know it, because many albums share titles.",
+      "Never state album personnel from memory. Include the artist when you know it, because many albums share titles. " +
+      "Or pass tune instead of album to list recordings of a composition (artist, album, year), oldest first.",
     inputSchema: {
       type: "object",
       properties: {
         album: { type: "string", description: "Album title, e.g. \"Kind of Blue\"." },
         artist: { type: "string", description: "Leader or credited artist, e.g. \"Miles Davis\". Optional but strongly recommended." },
         track: { type: "string", description: "Optional track title, to get just that track's players." },
+        tune: { type: "string", maxLength: 80, description: "A composition, e.g. \"Body and Soul\". Use instead of album." },
       },
-      required: ["album"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -307,7 +308,16 @@ async function lookupMusician({ name }) {
   };
 }
 
-async function albumLineup({ album, artist, track }) {
+async function albumLineup({ album, artist, track, tune }) {
+  const given = (v) => v !== undefined && v !== null && v !== "";
+  // Exactly one of album / tune. The schema can't say "one of" compactly, so the handler does.
+  if (given(tune)) {
+    if (given(album) || given(track) || given(artist)) {
+      throw new Error('pass either "tune" alone, or "album" (with optional artist/track), not both');
+    }
+    return tuneRecordings(tune);
+  }
+  if (!given(album)) throw new Error('pass "album" (an album title) or "tune" (a composition)');
   album = requireString(album, "album", 150);
   if (artist !== undefined && artist !== null && artist !== "") artist = requireString(artist, "artist", 100);
   else artist = null;
@@ -448,6 +458,141 @@ export function pickPressings(releases) {
     .map((r, i) => ({ r, i }))
     .sort((a, b) => rank(a.r) - rank(b.r) || date(a.r).localeCompare(date(b.r)) || a.i - b.i)
     .map(({ r }) => r);
+}
+
+/* ---------- recordings of a tune (album_lineup with tune) ---------- */
+
+const MAX_TUNE_ROWS = 8;
+const MBID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const creditName = (ac) => (ac || []).map((c) => (c.name || "") + (c.joinphrase || "")).join("").trim();
+const yearOf = (d) => (/^\d{4}/.test(d || "") ? Number(d.slice(0, 4)) : null);
+
+/**
+ * "Which versions of Body and Soul should I check out?" A two-step lookup in ONE tool call,
+ * orchestrated here so the model can't skip the matching step or pair a recording with the wrong album:
+ *   1. find the composition as a MusicBrainz work (exact title, after normalizing);
+ *   2. browse the recordings linked to that work (one page of 100);
+ *   3. look up the album names for just the rows we keep (one search request).
+ * Dedupe, medley filtering, ordering and the cap are all done in code.
+ */
+async function tuneRecordings(tune) {
+  tune = requireString(tune, "tune", 80);
+  const q = normalizeTitle(tune);
+  const notFound = {
+    found: false,
+    message: "MusicBrainz has no composition with that title. Tell the user; do not list recordings from memory.",
+  };
+  if (!q) return notFound;
+
+  const clean = (s) => s.replace(/["\\]/g, " ").trim();
+  const search = await getJson(
+    "https://musicbrainz.org/ws/2/work?fmt=json&limit=10&query=" + encodeURIComponent(`work:"${clean(tune)}"`)
+  );
+  // Only a strong match whose title is the same tune (case and punctuation aside); never a near miss.
+  const work = (search?.works || [])
+    .filter((w) => Number(w.score ?? 0) >= 90 && MBID_RE.test(w.id || "") && normalizeTitle(w.title || "") === q)
+    .sort((a, b) => Number(b.score) - Number(a.score))[0];
+  if (!work) return notFound;
+
+  await sleep(1100); // MusicBrainz allows about 1 request per second
+  const browse = await getJson(
+    `https://musicbrainz.org/ws/2/recording?fmt=json&limit=100&work=${work.id}&inc=artist-credits+work-rels`
+  );
+  const recordings = browse?.recordings || [];
+  const rows = pickTuneRecordings(recordings, work.id);
+
+  const out = {
+    found: true,
+    source: "MusicBrainz",
+    tune: work.title,
+    written_by: writersOf(work),
+    recordings: rows.map(({ id, ...r }) => r),
+  };
+  if (rows.length === 0) {
+    out.note = "MusicBrainz knows this composition but links no recordings to it. Say so; do not list recordings from memory.";
+    return out;
+  }
+
+  // Album names for the rows we kept, in one request (rid = recording MBID).
+  try {
+    await sleep(1100);
+    const ids = rows.map((r) => `rid:"${r.id}"`).join(" OR ");
+    const found = await getJson(
+      `https://musicbrainz.org/ws/2/recording?fmt=json&limit=${rows.length}&query=` + encodeURIComponent(ids)
+    );
+    const byId = new Map((found?.recordings || []).map((r) => [r.id, r]));
+    out.recordings = rows.map(({ id, ...r }) => ({ ...r, album: firstAlbum(byId.get(id)?.releases) }));
+  } catch {
+    out.recordings = rows.map(({ id, ...r }) => ({ ...r, album: null }));
+  }
+
+  const total = Number(browse?.["recording-count"]) || recordings.length;
+  out.note =
+    "One row per artist, oldest first among the recordings found; not a complete discography. " +
+    "List them exactly as given; never add recordings from memory. album_lineup on any album gives its lineup." +
+    (total > recordings.length
+      ? ` MusicBrainz links ${total} recordings to this tune and these come from the first ${recordings.length}, so well-known versions may be missing.`
+      : "");
+  return out;
+}
+
+/**
+ * From one page of a work's recordings, keep one row per artist (their earliest),
+ * leave out medleys and videos, and sort oldest first. Exported for tests.
+ */
+export function pickTuneRecordings(recordings, workId, cap = MAX_TUNE_ROWS) {
+  const byArtist = new Map();
+  for (const [i, rec] of (recordings || []).entries()) {
+    if (!rec || rec.video || !MBID_RE.test(rec.id || "")) continue;
+    const perf = (rec.relations || []).filter((r) => r["target-type"] === "work" && r.type === "performance");
+    const self = perf.filter((r) => r.work?.id === workId);
+    // A medley is either marked as one, or one recording performing several works.
+    if (self.some((r) => (r.attributes || []).includes("medley"))) continue;
+    if (new Set(perf.map((r) => r.work?.id)).size > 1) continue;
+    const artist = creditName(rec["artist-credit"]);
+    if (!artist) continue;
+    const row = { id: rec.id, artist, year: yearOf(rec["first-release-date"]), i };
+    if (self.some((r) => (r.attributes || []).includes("live"))) row.live = true;
+    const key = artist.toLowerCase();
+    const prev = byArtist.get(key);
+    if (!prev || before(row, prev)) byArtist.set(key, row);
+  }
+  return [...byArtist.values()]
+    .sort((a, b) => (before(a, b) ? -1 : 1))
+    .slice(0, cap)
+    .map(({ i, ...r }) => r);
+}
+
+// Dated before undated, then older first, then MusicBrainz's own order.
+function before(a, b) {
+  if ((a.year === null) !== (b.year === null)) return a.year !== null;
+  if (a.year !== b.year) return a.year < b.year;
+  return a.i < b.i;
+}
+
+/**
+ * The album a recording first came out on: official, not a compilation or reissue, earliest date.
+ * Same idea as the original-pressing rule in pickPressings. Exported for tests.
+ */
+export function firstAlbum(releases) {
+  if (!Array.isArray(releases) || releases.length === 0) return null;
+  const isComp = (r) => (r["release-group"]?.["secondary-types"] || []).includes("Compilation");
+  const rank = (r) => (isComp(r) ? 4 : 0) + (isReissue(r) ? 2 : 0) + (!r.status || r.status === "Official" ? 0 : 1);
+  const date = (r) => (/^\d{4}/.test(r.date || "") ? r.date.padEnd(10, "-99") : "9999");
+  const best = releases
+    .filter((r) => r && typeof r.title === "string" && r.title.trim())
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => rank(a.r) - rank(b.r) || date(a.r).localeCompare(date(b.r)) || a.i - b.i)[0];
+  return best ? best.r.title : null;
+}
+
+// Composer and lyricist names, when the work search includes them.
+function writersOf(work) {
+  const names = (work.relations || [])
+    .filter((r) => ["composer", "lyricist", "writer"].includes(r.type) && r.artist?.name)
+    .map((r) => r.artist.name);
+  const unique = [...new Set(names)].slice(0, 6);
+  return unique.length ? unique : undefined;
 }
 
 /* ---------- general search (the fallback) ---------- */
