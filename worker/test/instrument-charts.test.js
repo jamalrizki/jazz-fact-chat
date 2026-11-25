@@ -107,6 +107,6 @@ test("the page header says which instrument; the model gets both keys", async ()
 test("chord_chart definition: instrument is an enum, and the definition stays small", () => {
   const t = TOOLS.find((x) => x.name === "chord_chart");
   assert.deepEqual(t.inputSchema.properties.instrument.enum, ["concert", "Bb", "Eb", "F"]);
-  assert.deepEqual(t.inputSchema.required, ["tune"]);
+  assert.equal(t.inputSchema.required, undefined, "tune or changes: the handler enforces one of the two");
   assert.ok(JSON.stringify({ d: t.description, s: t.inputSchema }).length < 1300, "sent with every request: keep it small");
 });

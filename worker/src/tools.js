@@ -120,11 +120,14 @@ export const TOOLS = [
       "Return the chord changes for a tune from the chord library (over 2,000 tunes, jazz and other styles), optionally transposed to any key. " +
       "Use this whenever the user asks for the chords, changes, a chord chart, or a lead sheet for a tune. " +
       "The result includes chart_text (plain text) and layout (the chart as written). " +
-      "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead.",
+      "If the tune isn't in the library, the result suggests close matches; never improvise a chart instead. " +
+      "For chords the user typed, pass changes and from_key, not tune.",
     inputSchema: {
       type: "object",
       properties: {
         tune: { type: "string", description: "Tune title, e.g. \"Autumn Leaves\" or \"rhythm changes\"." },
+        changes: { type: "string", maxLength: 400, description: "The user's chords as typed, | between bars." },
+        from_key: { type: "string", description: "Key the changes are in." },
         key: {
           type: "string",
           description: "Optional target key, e.g. \"F\", \"Bb\", \"F#\". Omit to use the tune's usual key.",
@@ -139,7 +142,6 @@ export const TOOLS = [
           description: "true for the changes in numbers: Roman numerals against the key (IIm7 V7 Imaj7).",
         },
       },
-      required: ["tune"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -734,7 +736,11 @@ function suggestCharts(tune) {
   return scored.slice(0, 8).map((x) => x.title);
 }
 
-async function chordChart({ tune, key, instrument, numerals }) {
+async function chordChart({ tune, changes, from_key, key, instrument, numerals } = {}) {
+  const has = (v) => v !== undefined && v !== null && v !== "";
+  if (has(tune) && has(changes)) throw new Error('Pass "tune" or "changes", not both.');
+  if (has(changes)) return typedChart({ changes, from_key, key, instrument, numerals });
+  if (has(from_key)) throw new Error('"from_key" goes with "changes".');
   tune = requireString(tune, "tune", 100);
   if (numerals === undefined || numerals === null) numerals = false;
   if (typeof numerals !== "boolean") throw new Error(`"numerals" must be true or false.`);
@@ -815,6 +821,124 @@ async function chordChart({ tune, key, instrument, numerals }) {
     chart_text: lines.join("\n"),
     layout: { style: chart.style || null, bars: written },
     note: "Common changes as typically played. Published versions and players' reharmonizations vary.",
+  };
+}
+
+/**
+ * chord_chart with `changes`: transpose chords the user typed (a napkin chart, an original,
+ * a reharm). The model only copies the text into the argument; parsing and transposition
+ * happen here, with the same transposeChord the library charts use. Anything that isn't a
+ * chord this code can read is refused as a whole (with a count, never echoing the text),
+ * so nothing comes back half-transposed.
+ */
+const TYPED_MAX_CHARS = 400;
+const TYPED_MAX_BARS = 32;
+const TYPED_MAX_CHORDS = 64;
+const TYPED_MAX_PER_BAR = 4;
+// Root, then the quality exactly as typed (m7, -7, Δ7, ø7, 7#9, 6/9, sus4 …), then an optional
+// /bass note. A slash inside the quality is only allowed before a digit (6/9), so "Dm7/" or
+// "C7/x" is refused instead of being read as a chord.
+const TYPED_CHORD_RE = /^([A-G])([b#]?)((?:[A-Za-z0-9+#()°øΔ–^,-]|\/(?=\d))*?)(?:\/([A-G])([b#]?))?$/;
+const MAX_QUALITY = 12;
+
+// ♭/♯ typed on a phone become b/#, on the root and the bass only; the quality is left as typed.
+function normalizeTypedChord(tok) {
+  const acc = (c) => (c === "♭" ? "b" : "#");
+  return tok.replace(/^([A-G])([♭♯])/, (_, l, a) => l + acc(a)).replace(/\/([A-G])([♭♯])$/, (_, l, a) => `/${l}${acc(a)}`);
+}
+
+export function parseTypedChanges(text) {
+  const segments = String(text).split(/[|\n]+/).map((b) => b.trim());
+  while (segments.length && !segments[0]) segments.shift();
+  while (segments.length && !segments[segments.length - 1]) segments.pop();
+  if (!segments.length) return { error: "No chords found. Put the chords in changes, with | between bars." };
+  if (segments.length > TYPED_MAX_BARS) return { error: `Too many bars: at most ${TYPED_MAX_BARS}. Ask the user for one section at a time.` };
+  let unreadable = 0;
+  let chords = 0;
+  let crowded = false;
+  const bars = segments.map((seg, i) => {
+    const toks = seg.split(/\s+/).filter(Boolean);
+    if (toks.length === 1 && toks[0] === "%") {
+      if (i === 0) unreadable++; // nothing to repeat yet
+      return "%";
+    }
+    if (toks.length > TYPED_MAX_PER_BAR) crowded = true;
+    return toks.map((raw) => {
+      chords++;
+      if (raw === "N.C.") return raw;
+      const tok = normalizeTypedChord(raw);
+      const m = tok.match(TYPED_CHORD_RE);
+      if (!m || m[3].length > MAX_QUALITY) { unreadable++; return null; }
+      return tok;
+    });
+  });
+  if (chords > TYPED_MAX_CHORDS) return { error: `Too many chords: at most ${TYPED_MAX_CHORDS}. Ask the user for one section at a time.` };
+  if (crowded) return { error: `At most ${TYPED_MAX_PER_BAR} chords per bar. Put | between bars, as the user wrote them.` };
+  if (unreadable) {
+    return {
+      unreadable,
+      error: `${unreadable} chord${unreadable === 1 ? "" : "s"} I couldn't read. Ask the user to check them (chords like Dm7, Bb7, F#m7b5, C7/E, N.C., or % to repeat a bar). Do not transpose them yourself.`,
+    };
+  }
+  return { bars };
+}
+
+function typedChart({ changes, from_key, key, instrument, numerals }) {
+  if (typeof changes !== "string") throw new Error('"changes" must be a string.');
+  if (changes.length > TYPED_MAX_CHARS) throw new Error(`"changes" is too long (at most ${TYPED_MAX_CHARS} characters).`);
+  // Slice 1: concert keys only. Written keys and numerals for typed changes come later.
+  if ((instrument !== undefined && instrument !== null && instrument !== "" && instrument !== "concert") || numerals === true) {
+    return {
+      found: false,
+      message: "For chords the user typed, only a concert key is supported so far, not instrument or numerals. Say so, and offer the concert-key version. Do not transpose them yourself.",
+    };
+  }
+  if (from_key === undefined || from_key === null || from_key === "") {
+    return {
+      found: false,
+      message: "Ask the user what key these changes are in, then call chord_chart again with from_key. Do not guess the key, and do not transpose them yourself.",
+    };
+  }
+  const from = parseKeyArg(requireString(from_key, "from_key", 20));
+  if (!from) throw new Error('"from_key" is not a key I understand. Use a key like C, Bb, F# or C minor.');
+  const parsed = parseTypedChanges(changes);
+  if (parsed.error) return { found: false, ...(parsed.unreadable ? { unreadable: parsed.unreadable } : {}), message: parsed.error };
+
+  const mode = from.mode || "major";
+  const sharpSet = mode === "minor" ? SHARP_MINOR_KEYS : SHARP_MAJOR_KEYS;
+  let target = from;
+  if (key !== undefined && key !== null && key !== "") {
+    const k = parseKeyArg(requireString(key, "key", 20));
+    if (!k) throw new Error("That is not a key I understand. Use a note name like F, Bb, or F#.");
+    target = k; // a mode word on key is accepted; the changes keep from_key's mode
+  }
+  const semis = (target.pc - from.pc + 12) % 12;
+  const names = sharpSet.has(target.name) ? SHARP_NAMES : FLAT_NAMES;
+  const keyName = semis === 0 ? from.name : names[target.pc];
+  const tx = (c) => (c === "N.C." || semis === 0 ? c : transposeChord(c, semis, names));
+  const bars = parsed.bars.map((b) => (b === "%" ? b : b.map(tx).join(" ")));
+
+  const keyLabel = `${keyName} ${mode}`;
+  const form = `${bars.length} bar${bars.length === 1 ? "" : "s"}`;
+  const lines = [`Your changes · ${keyLabel} · ${form}`];
+  for (let i = 0; i < bars.length; i += 4) lines.push(`   | ${bars.slice(i, i + 4).join(" | ")} |`);
+  const written = bars.map((b) => (b === "%" ? { r: "%" } : { c: b.split(" ") }));
+  written[0].t = "4/4";
+  written[written.length - 1].e = "Z";
+
+  return {
+    found: true,
+    source: "typed by the user",
+    title: "Your changes",
+    composer: "",
+    key: keyLabel,
+    from_key: `${from.name} ${mode}`,
+    transposed: semis !== 0,
+    form,
+    bars: bars.length,
+    chart_text: lines.join("\n"),
+    layout: { style: null, bars: written },
+    note: "The user's own chords, transposed in code. Every chord was read; none were changed or added.",
   };
 }
 
