@@ -136,7 +136,7 @@ test("public /mcp: chord_chart takes numerals", async () => {
 test("chord_chart definition: numerals is a boolean and the definition stays small", () => {
   const t = TOOLS.find((x) => x.name === "chord_chart");
   assert.equal(t.inputSchema.properties.numerals.type, "boolean");
-  assert.deepEqual(t.inputSchema.required, ["tune"]);
+  assert.equal(t.inputSchema.required, undefined); // tune or changes, enforced in the handler
   assert.ok(JSON.stringify({ d: t.description, s: t.inputSchema }).length < 1300);
 });
 
